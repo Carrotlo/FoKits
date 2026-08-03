@@ -1,0 +1,51 @@
+# FoKits main configuration
+config-version: 8
+
+inventory:
+  # If false, claiming is denied when a player cannot fit all required items.
+  # If true, overflow items are dropped at the player's location.
+  override-full-inventories: false
+
+native-dialogs:
+  # Uses Minecraft's native dialog/input screens for search and text/number input when supported.
+  # Requires a compatible Paper or Paper-fork server with the Dialog API.
+  # Spigot and older versions automatically fall back to inventory/chat GUI mode.
+  # Set this to false to always use inventory/chat GUI mode.
+  enabled: true
+
+  # Sends admins a short warning when native dialogs are enabled but unavailable and the plugin falls back.
+  warn-on-fallback: true
+
+player-gui:
+  title: "&8ᴋɪᴛ ѕᴇʟᴇᴄᴛᴏʀ"
+  rows: 3
+  fill-background: true
+  filler-material: GRAY_STAINED_GLASS_PANE
+  layout:
+    # Place chest markers in the admin layout editor for kit auto-slots.
+    # Any non-chest item in a slot becomes a static item.
+    kit-slots: [ 11, 12, 13, 14, 15 ]
+    static-items: {}
+  lore:
+    available:
+      - "{white}Left click to claim this kit."
+      - "{white}Right click to preview its contents."
+      - ""
+      - "{muted}Status: {good}Ready"
+    cooldown:
+      - "{white}Left click to try claiming."
+      - "{white}Right click to preview its contents."
+      - ""
+      - "{muted}Next claim in: {theme}{time_remaining}"
+    no-permission:
+      - "{white}Left click to try claiming."
+      - "{white}Right click to preview its contents."
+      - ""
+      - "{muted}Status: {bad}Missing permission"
+    claimed-once:
+      - "{white}Left click to try claiming."
+      - "{white}Right click to preview its contents."
+      - ""
+      - "{muted}Status: {bad}Already claimed"
+    disabled:
+      - "{white}This kit is currently disabled."

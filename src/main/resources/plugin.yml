@@ -1,0 +1,29 @@
+name: FoKits
+description: Friendly and configurable kit plugin with GUI editor
+version: '${version}'
+
+main: me.foesio.foKits.FoKits
+api-version: '1.21'
+
+authors: [ Carrotio ]
+softdepend: [ PlaceholderAPI ]
+
+commands:
+  fokits:
+    description: Open kits GUI or claim a specific kit
+    aliases: [ kits, kit ]
+    permission: fokits.use
+    usage: /<command> [kit]
+  fokitsadmin:
+    description: FoKits admin command
+    aliases: [ kitsadmin, kitadmin ]
+    permission: fokits.admin
+    usage: /<command> <version|reload|editor|resetcooldown> [player] [kit]
+
+permissions:
+  fokits.use:
+    description: Use FoKits player command
+    default: true
+  fokits.admin:
+    description: Use FoKits admin command
+    default: op

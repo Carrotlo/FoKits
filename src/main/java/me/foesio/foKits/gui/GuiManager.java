@@ -13,6 +13,10 @@ import me.foesio.core.editor.EditorDialogInputs;
 import me.foesio.core.editor.EditorItemFactory;
 import me.foesio.core.gui.GuiButtonConfig;
 import me.foesio.core.gui.GuiSlots;
+import me.foesio.core.gui.EntryBrowserClick;
+import me.foesio.core.gui.EntryBrowserHolder;
+import me.foesio.core.gui.EntryBrowserMenus;
+import me.foesio.core.gui.EntryBrowserRequest;
 import me.foesio.core.message.FoMessageService;
 import me.foesio.core.selector.TriStateSelectionActionType;
 import me.foesio.core.selector.TriStateSelectionClick;
@@ -66,14 +70,8 @@ import java.util.regex.Pattern;
 public class GuiManager implements Listener {
     private static final int PREVIEW_SIZE = 54;
     private static final int PREVIEW_STORAGE_START_SLOT = 18;
-    private static final List<Integer> ADMIN_LIST_CONTENT_SLOTS = List.of(
-            10, 11, 12, 13, 14, 15, 16,
-            19, 20, 21, 22, 23, 24, 25,
-            28, 29, 30, 31, 32, 33, 34
-    );
-    private static final int ADMIN_LIST_PAGE_SIZE = ADMIN_LIST_CONTENT_SLOTS.size();
     private static final int ADMIN_KIT_DELETE_SLOT = 31;
-    private static final int DELETE_CONFIRM_CANCEL_SLOT = 11;
+    private static final int DELETE_CONFIRM_CANCEL_SLOT = GuiSlots.bottomMiddleSlot(3);
     private static final int DELETE_CONFIRM_CONFIRM_SLOT = 15;
     private static final int CLAIMED_ITEM_EDIT_SLOT = 13;
     private static final int KIT_OFFHAND_SLOT = 6;
@@ -265,12 +263,6 @@ public class GuiManager implements Listener {
 
     public void openAdminKitList(Player player, int page, String search) {
         Inventory inventory = Bukkit.createInventory(player, 54, guiTitle("&8ᴋɪᴛ ʟɪsᴛ"));
-        GuiSession session = new GuiSession(GuiType.ADMIN_KIT_LIST, "");
-        session.setPage(page);
-        session.setSearchQuery(search);
-
-        fill(inventory, Material.GRAY_STAINED_GLASS_PANE);
-
         List<KitDefinition> list = new ArrayList<>(kits.getAll());
         list.sort(Comparator.comparingInt(KitDefinition::getOrderIndex).thenComparing(KitDefinition::getKey));
         String normalizedSearch = normalizeSearch(search);
@@ -278,56 +270,28 @@ public class GuiManager implements Listener {
             list.removeIf(kit -> !matchesSearch(kit, normalizedSearch));
         }
 
-        int totalPages = Math.max(1, (int) Math.ceil(list.size() / (double) ADMIN_LIST_PAGE_SIZE));
-        int resolvedPage = Math.max(0, Math.min(page, totalPages - 1));
-        session.setPage(resolvedPage);
-        session.setSearchQuery(normalizedSearch);
+        List<EntryBrowserRequest.Entry> entries = list.stream()
+                .map(kit -> EntryBrowserRequest.Entry.of(kit.getKey(), buildAdminKitItem(kit)))
+                .toList();
+        int maxPage = EntryBrowserMenus.maxPage(EntryBrowserRequest.builder().entries(entries).build());
+        int resolvedPage = Math.max(0, Math.min(page, maxPage));
         adminListStates.put(player.getUniqueId(), new AdminListState(resolvedPage, normalizedSearch));
 
-        ItemStack emptyKitSlot = makeItem(Material.LIGHT_GRAY_STAINED_GLASS_PANE, " ", List.of(), null);
-        for (int slot : ADMIN_LIST_CONTENT_SLOTS) {
-            inventory.setItem(slot, emptyKitSlot.clone());
-        }
-
-        int from = resolvedPage * ADMIN_LIST_PAGE_SIZE;
-        int to = Math.min(list.size(), from + ADMIN_LIST_PAGE_SIZE);
-        for (int i = from; i < to; i++) {
-            KitDefinition kit = list.get(i);
-            ItemStack item = buildAdminKitItem(kit);
-            int slot = ADMIN_LIST_CONTENT_SLOTS.get(i - from);
-            inventory.setItem(slot, item);
-            session.getActions().put(slot, "kit-list:" + kit.getKey());
-        }
-
-        if (resolvedPage > 0) {
-            inventory.setItem(45, buttons.previousPage(resolvedPage, totalPages - 1));
-        }
-        inventory.setItem(47, makeItem(Material.ANVIL, "{theme}Create Kit", List.of("{white}Click to create a new kit.", "{white}Expected key: letters, numbers, _ or -"), null));
-        inventory.setItem(51, buttons.search(normalizedSearch));
-        if (!normalizedSearch.isEmpty()) {
-            inventory.setItem(52, buttons.clearSearch("kits"));
-        }
-        if (resolvedPage < totalPages - 1) {
-            inventory.setItem(53, buttons.nextPage(resolvedPage, totalPages - 1));
-        }
-        int backSlot = GuiSlots.bottomMiddleSlot(6);
-        inventory.setItem(backSlot, buttons.back());
-
-        if (resolvedPage > 0) {
-            session.getActions().put(45, "kit-list-prev-page");
-        }
-        session.getActions().put(47, "create-kit");
-        session.getActions().put(51, "search-kit-list");
-        if (!normalizedSearch.isEmpty()) {
-            session.getActions().put(52, "kit-list-clear-search");
-        }
-        if (resolvedPage < totalPages - 1) {
-            session.getActions().put(53, "kit-list-next-page");
-        }
-        session.getActions().put(backSlot, "open:admin-root");
-
-        player.openInventory(inventory);
-        sessions.put(player.getUniqueId(), session);
+        sessions.remove(player.getUniqueId());
+        EntryBrowserRequest request = EntryBrowserRequest.builder()
+                .title("&8ᴋɪᴛ ʟɪꜱᴛ")
+                .entries(entries)
+                .page(resolvedPage)
+                .filter(normalizedSearch)
+                .buttons(buttons)
+                .showBack(true)
+                .addButton(makeItem(Material.ANVIL, "{theme}Create Kit", List.of(
+                        "{white}Click to create a new kit.",
+                        "{white}Expected key: letters, numbers, _ or -"), null))
+                .emptyItem(makeItem(Material.PAPER, "{bad}No Kits", List.of(
+                        "{white}No kits match the current search."), null))
+                .build();
+        player.openInventory(EntryBrowserMenus.createInventory(request));
     }
 
     public void openAdminKitSettings(Player player, String kitKey) {
@@ -618,6 +582,16 @@ public class GuiManager implements Listener {
             return;
         }
 
+        if (event.getView().getTopInventory().getHolder() instanceof EntryBrowserHolder holder) {
+            if (event.getClickedInventory() == event.getView().getTopInventory()) {
+                event.setCancelled(true);
+                handleEntryBrowserClick(player, event.getRawSlot(), event.getClick(), holder);
+            } else if (event.isShiftClick()) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+
         if (event.getView().getTopInventory().getHolder() instanceof TriStateSelectionHolder holder) {
             handleBlockedWorldSelectorClick(event, player, holder);
             return;
@@ -668,6 +642,16 @@ public class GuiManager implements Listener {
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) {
             return;
+        }
+
+        if (event.getView().getTopInventory().getHolder() instanceof EntryBrowserHolder) {
+            int topSize = event.getView().getTopInventory().getSize();
+            for (int rawSlot : event.getRawSlots()) {
+                if (rawSlot < topSize) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
         }
 
         GuiSession session = sessions.get(player.getUniqueId());
@@ -1038,6 +1022,39 @@ public class GuiManager implements Listener {
             return true;
         }
         return false;
+    }
+
+    private void handleEntryBrowserClick(Player player, int slot, ClickType clickType, EntryBrowserHolder holder) {
+        EntryBrowserClick click = EntryBrowserMenus.handleClick(slot, holder, clickType);
+        AdminListState state = adminListStates.getOrDefault(player.getUniqueId(),
+                new AdminListState(holder.request().page(), holder.request().filter()));
+        GuiSession listSession = new GuiSession(GuiType.ADMIN_KIT_LIST, "");
+        listSession.setPage(state.page());
+        listSession.setSearchQuery(state.search());
+        switch (click.action()) {
+            case ENTRY -> {
+                String key = click.entryId();
+                if (clickType != null && clickType.isShiftClick() && clickType.isRightClick()) {
+                    kits.delete(key);
+                    messages.send(player, "deleted", Map.of("{kit}", key));
+                    openLater(player, () -> openAdminKitList(player));
+                } else if (clickType != null && clickType.isRightClick()) {
+                    kits.get(key).ifPresent(kit -> openLater(player, () -> openPreview(player, kit, true)));
+                } else {
+                    openLater(player, () -> openAdminKitSettings(player, key));
+                }
+            }
+            case ADD -> handleAction(player, listSession, "create-kit", clickType);
+            case SEARCH -> handleAction(player, listSession, "search-kit-list", clickType);
+            case CLEAR_SEARCH -> openLater(player, () -> openAdminKitList(player, 0, ""));
+            case PREVIOUS_PAGE -> openLater(player, () -> openAdminKitList(
+                    player, holder.request().page() - 1, holder.request().filter()));
+            case NEXT_PAGE -> openLater(player, () -> openAdminKitList(
+                    player, holder.request().page() + 1, holder.request().filter()));
+            case BACK -> openLater(player, () -> openAdminRoot(player));
+            case NONE -> {
+            }
+        }
     }
 
     private void handleAction(Player player, GuiSession session, String action, ClickType click) {

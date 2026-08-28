@@ -6,6 +6,10 @@ import me.foesio.core.message.FoMessageMigrations;
 import me.foesio.core.message.FoMessageService;
 import me.foesio.core.reload.FoReloadRegistry;
 import me.foesio.core.reload.FoReloadResult;
+import me.foesio.core.sound.FoAdminSounds;
+import me.foesio.core.sound.FoEditorSounds;
+import me.foesio.core.sound.FoGuiSounds;
+import me.foesio.core.sound.FoSoundService;
 import me.foesio.core.update.UpdateNoticeService;
 import me.foesio.foKits.command.FoKitsAdminCommand;
 import me.foesio.foKits.command.FoKitsCommand;
@@ -20,6 +24,7 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.InputStream;
@@ -40,6 +45,10 @@ public final class FoKits extends JavaPlugin {
     private KitService kitService;
     private GuiManager guiManager;
     private UpdateNoticeService updates;
+    private FoSoundService sounds;
+    private FoAdminSounds adminSounds;
+    private FoEditorSounds editorSounds;
+    private FoGuiSounds guiSounds;
 
     @Override
     public void onEnable() {
@@ -48,10 +57,14 @@ public final class FoKits extends JavaPlugin {
         core = FoPluginCore.create(this);
         core.warnIfNativeDialogsUnavailable();
         core.metrics(BSTATS_PLUGIN_ID);
+        sounds = core.createSounds();
+        adminSounds = FoAdminSounds.create(sounds);
+        editorSounds = FoEditorSounds.create(sounds);
+        guiSounds = FoGuiSounds.create(sounds);
 
         settings = new PluginSettings(this);
         messages = FoMessageService.load(this, messageMigrations());
-        updates = core.createUpdateNotices(messages, MODRINTH_PROJECT_ID);
+        updates = core.createUpdateNotices(messages, MODRINTH_PROJECT_ID, adminSounds);
 
         userDataRepository = new UserDataRepository(this);
         userDataRepository.ensureFolder();
@@ -59,8 +72,8 @@ public final class FoKits extends JavaPlugin {
         kitRepository = new KitRepository(this);
         kitRepository.loadAll();
 
-        kitService = new KitService(this, settings, kitRepository, userDataRepository, messages, core.inventoryDeposits());
-        guiManager = new GuiManager(this, core, settings, messages, kitRepository, kitService);
+        kitService = new KitService(this, settings, kitRepository, userDataRepository, messages, core.inventoryDeposits(), sounds);
+        guiManager = new GuiManager(this, core, settings, messages, kitRepository, kitService, editorSounds, guiSounds, sounds);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
 
@@ -80,6 +93,9 @@ public final class FoKits extends JavaPlugin {
             core.close();
             core = null;
         }
+        sounds = null;
+        adminSounds = null;
+        editorSounds = null;
         getLogger().info("FoKits disabled.");
     }
 
@@ -92,6 +108,7 @@ public final class FoKits extends JavaPlugin {
         FoReloadResult result = FoReloadRegistry.create()
                 .add("config", configManager::reload)
                 .addMessages(messages)
+                .add("sounds", sounds::reload)
                 .add("dialogs", guiManager::reloadDialogService)
                 .add("kits", () -> {
                     kitRepository.loadAll();
@@ -109,8 +126,16 @@ public final class FoKits extends JavaPlugin {
         return updates;
     }
 
+    public FoAdminSounds adminSounds() {
+        return adminSounds;
+    }
+
+    public void playSound(Player player, String key) {
+        sounds.play(player, key);
+    }
+
     private void registerCommands() {
-        FoKitsCommand foKitsCommand = new FoKitsCommand(guiManager, messages, kitRepository, kitService);
+        FoKitsCommand foKitsCommand = new FoKitsCommand(guiManager, messages, kitRepository, kitService, adminSounds);
         PluginCommand kits = getCommand("fokits");
         if (kits != null) {
             kits.setExecutor(foKitsCommand);

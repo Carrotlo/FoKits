@@ -26,6 +26,9 @@ import me.foesio.core.selector.TriStateSelectionRequest;
 import me.foesio.core.selector.TriStateSelectionState;
 import me.foesio.core.selector.TriStateSelections;
 import me.foesio.core.selector.WorldSelectionEntries;
+import me.foesio.core.sound.FoEditorSounds;
+import me.foesio.core.sound.FoGuiSounds;
+import me.foesio.core.sound.FoSoundService;
 import me.foesio.foKits.config.PluginSettings;
 import me.foesio.foKits.model.ClaimMode;
 import me.foesio.foKits.model.ClaimResult;
@@ -101,6 +104,9 @@ public class GuiManager implements Listener {
     private final ChatPromptManager prompts;
     private final KitRepository kits;
     private final KitService kitService;
+    private final FoEditorSounds editorSounds;
+    private final FoGuiSounds guiSounds;
+    private final FoSoundService sounds;
     private final Map<UUID, GuiSession> sessions = new HashMap<>();
     private final Map<UUID, AdminListState> adminListStates = new HashMap<>();
     private final Map<UUID, String> activeWorldSelectors = new HashMap<>();
@@ -113,7 +119,10 @@ public class GuiManager implements Listener {
             PluginSettings settings,
             FoMessageService messages,
             KitRepository kits,
-            KitService kitService
+            KitService kitService,
+            FoEditorSounds editorSounds,
+            FoGuiSounds guiSounds,
+            FoSoundService sounds
     ) {
         this.plugin = plugin;
         this.core = core;
@@ -122,6 +131,9 @@ public class GuiManager implements Listener {
         this.prompts = new ChatPromptManager(plugin, core.scheduler());
         this.kits = kits;
         this.kitService = kitService;
+        this.editorSounds = editorSounds;
+        this.guiSounds = guiSounds;
+        this.sounds = sounds;
         reloadDialogService();
     }
 
@@ -150,6 +162,13 @@ public class GuiManager implements Listener {
     }
 
     public void openPlayerKits(Player player) {
+        openPlayerKits(player, true);
+    }
+
+    private void openPlayerKits(Player player, boolean playOpenSound) {
+        if (playOpenSound) {
+            guiSounds.open(player);
+        }
         int size = settings.playerGuiRows() * 9;
         Inventory inventory = Bukkit.createInventory(player, size, guiTitle(settings.playerGuiTitle()));
         GuiSession session = new GuiSession(GuiType.PLAYER_KITS, "");
@@ -208,6 +227,9 @@ public class GuiManager implements Listener {
     }
 
     public void openPreview(Player player, KitDefinition kit, boolean backToAdmin) {
+        if (!backToAdmin) {
+            guiSounds.open(player);
+        }
         Inventory inventory = Bukkit.createInventory(player, PREVIEW_SIZE,
                 guiTitle("&8ᴋɪᴛ ᴘʀᴇᴠɪᴇᴡ &8- " + kit.getDisplayOrKey()));
         GuiSession session = new GuiSession(GuiType.PLAYER_PREVIEW, kit.getKey());
@@ -242,6 +264,13 @@ public class GuiManager implements Listener {
     }
 
     public void openAdminRoot(Player player) {
+        openAdminRoot(player, true);
+    }
+
+    private void openAdminRoot(Player player, boolean playOpenSound) {
+        if (playOpenSound) {
+            editorSounds.open(player);
+        }
         Inventory inventory = Bukkit.createInventory(player, 27, guiTitle("&8ꜰᴏᴋɪᴛꜱ ᴇᴅɪᴛᴏʀ"));
         GuiSession session = new GuiSession(GuiType.ADMIN_ROOT, "");
 
@@ -570,7 +599,7 @@ public class GuiManager implements Listener {
         session.getActions().put(13, "edit-gui-rows");
         session.getActions().put(15, "toggle-gui-fill");
         session.getActions().put(16, "edit-gui-filler");
-        session.getActions().put(GuiSlots.bottomMiddleSlot(3), "open:admin-root");
+        session.getActions().put(GuiSlots.bottomMiddleSlot(3), "back:admin-root");
 
         player.openInventory(inventory);
         sessions.put(player.getUniqueId(), session);
@@ -703,6 +732,7 @@ public class GuiManager implements Listener {
 
         if (session.getType() == GuiType.ADMIN_PLAYER_GUI_LAYOUT_EDITOR) {
             savePlayerGuiLayout(event.getInventory());
+            sounds.play(player, "kit.layout-saved");
             messages.send(player, "saved");
             return;
         }
@@ -719,6 +749,7 @@ public class GuiManager implements Listener {
         } else {
             saveClaimedItemIntoKit(event.getInventory(), optionalKit.get());
         }
+        editorSounds.save(player);
         messages.send(player, "saved");
     }
 
@@ -742,10 +773,20 @@ public class GuiManager implements Listener {
             }
 
             switch (action) {
-                case "back-items" -> openLater(player, () -> openAdminKitSettings(player, session.getKitKey()));
-                case "clear-items" -> clearEditorSlots(event.getView().getTopInventory());
+                case "back-items" -> {
+                    Optional<KitDefinition> optionalKit = kits.get(session.getKitKey());
+                    optionalKit.ifPresent(kit -> saveEditorInventoryIntoKit(event.getView().getTopInventory(), kit));
+                    session.setCancelItemEditorSave(true);
+                    editorSounds.back(player);
+                    openLater(player, () -> openAdminKitSettings(player, session.getKitKey()));
+                }
+                case "clear-items" -> {
+                    clearEditorSlots(event.getView().getTopInventory());
+                    editorSounds.delete(player);
+                }
                 case "copy-from-inventory" -> {
                     copyPlayerInventoryIntoEditor(player, event.getView().getTopInventory());
+                    sounds.play(player, "kit.items-copied");
                     messages.send(player, "copied-inventory");
                 }
                 default -> {
@@ -763,7 +804,7 @@ public class GuiManager implements Listener {
                 || event.getClick() == ClickType.SHIFT_RIGHT
                 || event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
             event.setCancelled(true);
-            shiftItemIntoEditor(event);
+            shiftItemIntoEditor(event, player);
         }
     }
 
@@ -786,12 +827,14 @@ public class GuiManager implements Listener {
         }
 
         if (click.action() == TriStateSelectionActionType.BACK) {
+            editorSounds.back(player);
             activeWorldSelectors.remove(player.getUniqueId());
             openLater(player, () -> openAdminKitSettings(player, kitKey));
             return;
         }
 
         if (click.action() == TriStateSelectionActionType.SEARCH) {
+            editorSounds.search(player);
             openTextInput(player, prompt(
                             "world-search",
                             "{theme}Search Worlds",
@@ -812,6 +855,13 @@ public class GuiManager implements Listener {
         if (click.action() == TriStateSelectionActionType.PREVIOUS_PAGE
                 || click.action() == TriStateSelectionActionType.NEXT_PAGE
                 || click.action() == TriStateSelectionActionType.CLEAR_SEARCH) {
+            if (click.action() == TriStateSelectionActionType.PREVIOUS_PAGE) {
+                editorSounds.previousPage(player);
+            } else if (click.action() == TriStateSelectionActionType.NEXT_PAGE) {
+                editorSounds.nextPage(player);
+            } else {
+                editorSounds.clearSearch(player);
+            }
             TriStateSelectionRequest nextRequest = click.nextRequest();
             openLater(player, () -> openBlockedWorldSelector(player, kitKey, nextRequest.filter(), nextRequest.page()));
             return;
@@ -830,6 +880,7 @@ public class GuiManager implements Listener {
 
         refreshed.setDenyWorlds(TriStateSelections.disabledKeys(click.nextRequest()));
         kits.save(refreshed);
+        editorSounds.cycle(player);
         messages.send(player, "saved");
         String refreshedKey = refreshed.getKey();
         TriStateSelectionRequest nextRequest = click.nextRequest();
@@ -899,14 +950,19 @@ public class GuiManager implements Listener {
                     Optional<KitDefinition> optionalKit = kits.get(session.getKitKey());
                     if (optionalKit.isPresent()) {
                         saveClaimedItemIntoKit(event.getView().getTopInventory(), optionalKit.get());
+                        editorSounds.save(player);
                         messages.send(player, "saved");
                     }
                     session.setCancelItemEditorSave(true);
                     openLater(player, () -> openAdminKitSettings(player, session.getKitKey()));
                 }
-                case "clear-claimed-item" -> event.getView().getTopInventory().setItem(CLAIMED_ITEM_EDIT_SLOT, null);
+                case "clear-claimed-item" -> {
+                    event.getView().getTopInventory().setItem(CLAIMED_ITEM_EDIT_SLOT, null);
+                    editorSounds.delete(player);
+                }
                 case "cancel-claimed-item" -> {
                     session.setCancelItemEditorSave(true);
+                    editorSounds.back(player);
                     openLater(player, () -> openAdminKitSettings(player, session.getKitKey()));
                 }
                 default -> {
@@ -949,14 +1005,19 @@ public class GuiManager implements Listener {
                     Optional<KitDefinition> optionalKit = kits.get(session.getKitKey());
                     if (optionalKit.isPresent()) {
                         saveIconItemIntoKit(event.getView().getTopInventory(), optionalKit.get());
+                        editorSounds.save(player);
                         messages.send(player, "saved");
                     }
                     session.setCancelItemEditorSave(true);
                     openLater(player, () -> openAdminKitSettings(player, session.getKitKey()));
                 }
-                case "clear-icon-item" -> event.getView().getTopInventory().setItem(CLAIMED_ITEM_EDIT_SLOT, null);
+                case "clear-icon-item" -> {
+                    event.getView().getTopInventory().setItem(CLAIMED_ITEM_EDIT_SLOT, null);
+                    editorSounds.delete(player);
+                }
                 case "cancel-icon-item" -> {
                     session.setCancelItemEditorSave(true);
+                    editorSounds.back(player);
                     openLater(player, () -> openAdminKitSettings(player, session.getKitKey()));
                 }
                 default -> {
@@ -1035,23 +1096,48 @@ public class GuiManager implements Listener {
             case ENTRY -> {
                 String key = click.entryId();
                 if (clickType != null && clickType.isShiftClick() && clickType.isRightClick()) {
-                    kits.delete(key);
-                    messages.send(player, "deleted", Map.of("{kit}", key));
+                    if (kits.delete(key)) {
+                        sounds.play(player, "kit.deleted");
+                        messages.send(player, "deleted", Map.of("{kit}", key));
+                    } else {
+                        editorSounds.error(player);
+                        messages.send(player, "claim-kit-not-found", Map.of("{kit}", key));
+                    }
                     openLater(player, () -> openAdminKitList(player));
                 } else if (clickType != null && clickType.isRightClick()) {
+                    editorSounds.open(player);
                     kits.get(key).ifPresent(kit -> openLater(player, () -> openPreview(player, kit, true)));
                 } else {
+                    editorSounds.open(player);
                     openLater(player, () -> openAdminKitSettings(player, key));
                 }
             }
-            case ADD -> handleAction(player, listSession, "create-kit", clickType);
-            case SEARCH -> handleAction(player, listSession, "search-kit-list", clickType);
-            case CLEAR_SEARCH -> openLater(player, () -> openAdminKitList(player, 0, ""));
-            case PREVIOUS_PAGE -> openLater(player, () -> openAdminKitList(
-                    player, holder.request().page() - 1, holder.request().filter()));
-            case NEXT_PAGE -> openLater(player, () -> openAdminKitList(
-                    player, holder.request().page() + 1, holder.request().filter()));
-            case BACK -> openLater(player, () -> openAdminRoot(player));
+            case ADD -> {
+                editorSounds.add(player);
+                handleAction(player, listSession, "create-kit", clickType);
+            }
+            case SEARCH -> {
+                editorSounds.search(player);
+                handleAction(player, listSession, "search-kit-list", clickType);
+            }
+            case CLEAR_SEARCH -> {
+                editorSounds.clearSearch(player);
+                openLater(player, () -> openAdminKitList(player, 0, ""));
+            }
+            case PREVIOUS_PAGE -> {
+                editorSounds.previousPage(player);
+                openLater(player, () -> openAdminKitList(
+                        player, holder.request().page() - 1, holder.request().filter()));
+            }
+            case NEXT_PAGE -> {
+                editorSounds.nextPage(player);
+                openLater(player, () -> openAdminKitList(
+                        player, holder.request().page() + 1, holder.request().filter()));
+            }
+            case BACK -> {
+                editorSounds.back(player);
+                openLater(player, () -> openAdminRoot(player, false));
+            }
             case NONE -> {
             }
         }
@@ -1059,9 +1145,10 @@ public class GuiManager implements Listener {
 
     private void handleAction(Player player, GuiSession session, String action, ClickType click) {
         if (action.startsWith("open:")) {
+            editorSounds.open(player);
             String target = action.substring("open:".length());
             switch (target) {
-                case "admin-root" -> openLater(player, () -> openAdminRoot(player));
+                case "admin-root" -> openLater(player, () -> openAdminRoot(player, false));
                 case "admin-kit-list" -> openLater(player, () -> openAdminKitList(player));
                 case "admin-kit-list:reset" -> openLater(player, () -> openAdminKitList(player, 0, ""));
                 case "admin-gui-settings" -> openLater(player, () -> openAdminGuiSettings(player));
@@ -1074,7 +1161,13 @@ public class GuiManager implements Listener {
         if (action.startsWith("back:")) {
             String target = action.substring("back:".length());
             if (target.equals("player-kits")) {
-                openLater(player, () -> openPlayerKits(player));
+                guiSounds.back(player);
+                openLater(player, () -> openPlayerKits(player, false));
+                return;
+            }
+            editorSounds.back(player);
+            if (target.equals("admin-root")) {
+                openLater(player, () -> openAdminRoot(player, false));
                 return;
             }
             if (target.startsWith("admin-kit-settings:")) {
@@ -1088,7 +1181,8 @@ public class GuiManager implements Listener {
             String kitKey = action.substring("kit:".length());
             Optional<KitDefinition> optionalKit = kits.get(kitKey);
             if (optionalKit.isEmpty()) {
-                openLater(player, () -> openPlayerKits(player));
+                guiSounds.error(player);
+                openLater(player, () -> openPlayerKits(player, false));
                 return;
             }
             KitDefinition kit = optionalKit.get();
@@ -1099,7 +1193,7 @@ public class GuiManager implements Listener {
 
             ClaimResult result = kitService.claim(player, kit);
             kitService.sendClaimFeedback(player, result);
-            openLater(player, () -> openPlayerKits(player));
+            openLater(player, () -> openPlayerKits(player, false));
             return;
         }
 
@@ -1116,14 +1210,17 @@ public class GuiManager implements Listener {
                     input -> {
                         String key = KitDefinition.sanitizeKey(input);
                         if (kits.exists(key)) {
+                            editorSounds.error(player);
                             messages.send(player, "invalid-input");
                             openAdminKitList(player);
                             return;
                         }
                         try {
                             kits.createNew(key);
+                            sounds.play(player, "kit.created");
                             messages.send(player, "created", Map.of("{kit}", key));
                         } catch (Exception exception) {
+                            editorSounds.error(player);
                             messages.send(player, "invalid-input");
                         }
                         openAdminKitList(player);
@@ -1154,21 +1251,25 @@ public class GuiManager implements Listener {
         }
 
         if (action.equals("kit-list-prev-page")) {
+            editorSounds.previousPage(player);
             openLater(player, () -> openAdminKitList(player, session.getPage() - 1, session.getSearchQuery()));
             return;
         }
 
         if (action.equals("kit-list-next-page")) {
+            editorSounds.nextPage(player);
             openLater(player, () -> openAdminKitList(player, session.getPage() + 1, session.getSearchQuery()));
             return;
         }
 
         if (action.equals("kit-list-clear-search")) {
+            editorSounds.clearSearch(player);
             openLater(player, () -> openAdminKitList(player, 0, ""));
             return;
         }
 
         if (action.equals("cancel-delete-kit")) {
+            editorSounds.back(player);
             openLater(player, () -> openAdminKitSettings(player, session.getKitKey()));
             return;
         }
@@ -1181,15 +1282,22 @@ public class GuiManager implements Listener {
         if (action.startsWith("kit-list:")) {
             String key = action.substring("kit-list:".length());
             if (click.isShiftClick() && click.isRightClick()) {
-                kits.delete(key);
-                messages.send(player, "deleted", Map.of("{kit}", key));
+                if (kits.delete(key)) {
+                    sounds.play(player, "kit.deleted");
+                    messages.send(player, "deleted", Map.of("{kit}", key));
+                } else {
+                    editorSounds.error(player);
+                    messages.send(player, "claim-kit-not-found", Map.of("{kit}", key));
+                }
                 openLater(player, () -> openAdminKitList(player));
                 return;
             }
             if (click.isRightClick()) {
+                editorSounds.open(player);
                 kits.get(key).ifPresent(kit -> openLater(player, () -> openPreview(player, kit, true)));
                 return;
             }
+            editorSounds.open(player);
             openLater(player, () -> openAdminKitSettings(player, key));
             return;
         }
@@ -1212,20 +1320,25 @@ public class GuiManager implements Listener {
 
         switch (action) {
             case "toggle-enabled" -> {
-                kit.setEnabled(!kit.isEnabled());
+                boolean enabled = !kit.isEnabled();
+                kit.setEnabled(enabled);
                 kits.save(kit);
+                editorSounds.toggle(player, enabled);
                 messages.send(player, "saved");
                 openLater(player, () -> openAdminKitSettings(player, kit.getKey()));
             }
             case "toggle-claim-mode" -> {
                 kit.setClaimMode(kit.getClaimMode() == ClaimMode.COOLDOWN ? ClaimMode.ONE_TIME : ClaimMode.COOLDOWN);
                 kits.save(kit);
+                editorSounds.cycle(player);
                 messages.send(player, "saved");
                 openLater(player, () -> openAdminKitSettings(player, kit.getKey()));
             }
             case "toggle-broadcast" -> {
-                kit.setBroadcastOnClaim(!kit.isBroadcastOnClaim());
+                boolean enabled = !kit.isBroadcastOnClaim();
+                kit.setBroadcastOnClaim(enabled);
                 kits.save(kit);
+                editorSounds.toggle(player, enabled);
                 messages.send(player, "saved");
                 openLater(player, () -> openAdminKitSettings(player, kit.getKey()));
             }
@@ -1242,11 +1355,13 @@ public class GuiManager implements Listener {
                         input -> {
                             KitDefinition refreshed = kits.get(kit.getKey()).orElse(null);
                             if (refreshed == null) {
+                                editorSounds.error(player);
                                 openAdminKitList(player);
                                 return;
                             }
                             refreshed.setDisplayName(input);
                             kits.save(refreshed);
+                            editorSounds.save(player);
                             messages.send(player, "saved");
                             openAdminKitSettings(player, refreshed.getKey());
                         },
@@ -1267,12 +1382,14 @@ public class GuiManager implements Listener {
                             try {
                                 value = Integer.parseInt(input);
                             } catch (NumberFormatException exception) {
+                                editorSounds.error(player);
                                 messages.send(player, "invalid-input");
                                 openAdminKitSettings(player, kit.getKey());
                                 return;
                             }
 
                             if (value < 0) {
+                                editorSounds.error(player);
                                 messages.send(player, "invalid-input");
                                 openAdminKitSettings(player, kit.getKey());
                                 return;
@@ -1280,11 +1397,13 @@ public class GuiManager implements Listener {
 
                             KitDefinition refreshed = kits.get(kit.getKey()).orElse(null);
                             if (refreshed == null) {
+                                editorSounds.error(player);
                                 openAdminKitList(player);
                                 return;
                             }
                             refreshed.setOrderIndex(value);
                             kits.save(refreshed);
+                            editorSounds.save(player);
                             messages.send(player, "saved");
                             openAdminKitSettings(player, refreshed.getKey());
                         },
@@ -1303,11 +1422,13 @@ public class GuiManager implements Listener {
                         input -> {
                             KitDefinition refreshed = kits.get(kit.getKey()).orElse(null);
                             if (refreshed == null) {
+                                editorSounds.error(player);
                                 openAdminKitList(player);
                                 return;
                             }
                             refreshed.setRequiredPermission(input.equalsIgnoreCase("none") ? "" : input);
                             kits.save(refreshed);
+                            editorSounds.save(player);
                             messages.send(player, "saved");
                             openAdminKitSettings(player, refreshed.getKey());
                         },
@@ -1326,6 +1447,7 @@ public class GuiManager implements Listener {
                         input -> {
                             long millis = TimeUtil.parseDurationMillis(input);
                             if (millis <= 0L) {
+                                editorSounds.error(player);
                                 messages.send(player, "invalid-input");
                                 openAdminKitSettings(player, kit.getKey());
                                 return;
@@ -1333,17 +1455,20 @@ public class GuiManager implements Listener {
 
                             KitDefinition refreshed = kits.get(kit.getKey()).orElse(null);
                             if (refreshed == null) {
+                                editorSounds.error(player);
                                 openAdminKitList(player);
                                 return;
                             }
                             refreshed.setCooldownMillis(millis);
                             kits.save(refreshed);
+                            editorSounds.save(player);
                             messages.send(player, "saved");
                             openAdminKitSettings(player, refreshed.getKey());
                         },
                         () -> openAdminKitSettings(player, kit.getKey()));
             }
             case "edit-worlds" -> {
+                editorSounds.open(player);
                 openBlockedWorldSelector(player, kit, "");
             }
             case "edit-commands" -> {
@@ -1359,6 +1484,7 @@ public class GuiManager implements Listener {
                         input -> {
                             KitDefinition refreshed = kits.get(kit.getKey()).orElse(null);
                             if (refreshed == null) {
+                                editorSounds.error(player);
                                 openAdminKitList(player);
                                 return;
                             }
@@ -1377,6 +1503,7 @@ public class GuiManager implements Listener {
                             }
 
                             kits.save(refreshed);
+                            editorSounds.save(player);
                             messages.send(player, "saved");
                             openAdminKitSettings(player, refreshed.getKey());
                         },
@@ -1396,20 +1523,37 @@ public class GuiManager implements Listener {
                             String newKey = KitDefinition.sanitizeKey(input);
                             Optional<KitDefinition> renamed = kits.rename(kit.getKey(), newKey);
                             if (renamed.isEmpty()) {
+                                editorSounds.error(player);
                                 messages.send(player, "invalid-input");
                                 openAdminKitSettings(player, kit.getKey());
                                 return;
                             }
+                            sounds.play(player, "kit.renamed");
                             messages.send(player, "renamed", Map.of("{kit}", newKey));
                             openAdminKitSettings(player, newKey);
                         },
                         () -> openAdminKitSettings(player, kit.getKey()));
             }
-            case "delete-kit" -> openLater(player, () -> openDeleteConfirmGui(player, kit.getKey()));
-            case "open-item-editor" -> openLater(player, () -> openAdminItemEditor(player, kit.getKey()));
-            case "open-icon-item-editor" -> openLater(player, () -> openAdminIconItemEditor(player, kit.getKey()));
-            case "open-claimed-item-editor" -> openLater(player, () -> openAdminClaimedItemEditor(player, kit.getKey()));
-            case "preview-kit" -> openLater(player, () -> openPreview(player, kit, true));
+            case "delete-kit" -> {
+                editorSounds.open(player);
+                openLater(player, () -> openDeleteConfirmGui(player, kit.getKey()));
+            }
+            case "open-item-editor" -> {
+                editorSounds.open(player);
+                openLater(player, () -> openAdminItemEditor(player, kit.getKey()));
+            }
+            case "open-icon-item-editor" -> {
+                editorSounds.open(player);
+                openLater(player, () -> openAdminIconItemEditor(player, kit.getKey()));
+            }
+            case "open-claimed-item-editor" -> {
+                editorSounds.open(player);
+                openLater(player, () -> openAdminClaimedItemEditor(player, kit.getKey()));
+            }
+            case "preview-kit" -> {
+                editorSounds.open(player);
+                openLater(player, () -> openPreview(player, kit, true));
+            }
             default -> {
             }
         }
@@ -1419,8 +1563,10 @@ public class GuiManager implements Listener {
         boolean existed = kits.exists(kitKey);
         boolean deleted = existed && kits.delete(kitKey);
         if (deleted) {
+            sounds.play(player, "kit.deleted");
             messages.send(player, "deleted", Map.of("{kit}", kitKey));
         } else {
+            editorSounds.error(player);
             messages.send(player, "claim-kit-not-found", Map.of("{kit}", kitKey));
         }
         openAdminKitList(player);
@@ -1428,7 +1574,10 @@ public class GuiManager implements Listener {
 
     private void handleGuiSettingsAction(Player player, String action) {
         switch (action) {
-            case "open-gui-layout-editor" -> openLater(player, () -> openAdminPlayerGuiLayoutEditor(player));
+            case "open-gui-layout-editor" -> {
+                editorSounds.open(player);
+                openLater(player, () -> openAdminPlayerGuiLayoutEditor(player));
+            }
             case "edit-gui-title" -> {
                 openTextInput(player, prompt(
                                 "gui-title",
@@ -1443,6 +1592,7 @@ public class GuiManager implements Listener {
                             FileConfiguration config = settings.rawConfig();
                             config.set("player-gui.title", input);
                             plugin.saveConfig();
+                            editorSounds.save(player);
                             messages.send(player, "saved");
                             openAdminGuiSettings(player);
                         },
@@ -1463,12 +1613,14 @@ public class GuiManager implements Listener {
                             try {
                                 rows = Integer.parseInt(input);
                             } catch (NumberFormatException exception) {
+                                editorSounds.error(player);
                                 messages.send(player, "invalid-input");
                                 openAdminGuiSettings(player);
                                 return;
                             }
 
                             if (rows < 1 || rows > 6) {
+                                editorSounds.error(player);
                                 messages.send(player, "invalid-input");
                                 openAdminGuiSettings(player);
                                 return;
@@ -1476,6 +1628,7 @@ public class GuiManager implements Listener {
 
                             settings.rawConfig().set("player-gui.rows", rows);
                             plugin.saveConfig();
+                            editorSounds.save(player);
                             messages.send(player, "saved");
                             openAdminGuiSettings(player);
                         },
@@ -1485,6 +1638,7 @@ public class GuiManager implements Listener {
                 boolean next = !settings.fillBackground();
                 settings.rawConfig().set("player-gui.fill-background", next);
                 plugin.saveConfig();
+                editorSounds.toggle(player, next);
                 messages.send(player, "saved");
                 openLater(player, () -> openAdminGuiSettings(player));
             }
@@ -1501,12 +1655,14 @@ public class GuiManager implements Listener {
                         input -> {
                             Material material = Material.matchMaterial(input);
                             if (material == null || material.isAir()) {
+                                editorSounds.error(player);
                                 messages.send(player, "invalid-input");
                                 openAdminGuiSettings(player);
                                 return;
                             }
                             settings.rawConfig().set("player-gui.filler-material", material.name());
                             plugin.saveConfig();
+                            editorSounds.save(player);
                             messages.send(player, "saved");
                             openAdminGuiSettings(player);
                         },
@@ -1526,6 +1682,7 @@ public class GuiManager implements Listener {
         };
         Runnable cancel = () -> {
             if (activeDialogs.support().canUseNativeDialogs()) {
+                editorSounds.back(player);
                 messages.send(player, "prompt-cancelled");
             }
             run(onCancel);
@@ -1540,6 +1697,9 @@ public class GuiManager implements Listener {
                 submit,
                 cancel
         );
+        if (openedNative) {
+            editorSounds.open(player);
+        }
         warnNativeFallback(player, activeDialogs.support(), openedNative);
     }
 
@@ -1786,13 +1946,16 @@ public class GuiManager implements Listener {
         }
     }
 
-    private void shiftItemIntoEditor(InventoryClickEvent event) {
+    private void shiftItemIntoEditor(InventoryClickEvent event, Player player) {
         ItemStack current = event.getCurrentItem();
         if (current == null || current.getType().isAir() || current.getAmount() <= 0) {
             return;
         }
 
         int remaining = moveItemIntoEditor(event.getView().getTopInventory(), current);
+        if (remaining < current.getAmount()) {
+            editorSounds.add(player);
+        }
         if (remaining <= 0) {
             event.setCurrentItem(null);
             return;

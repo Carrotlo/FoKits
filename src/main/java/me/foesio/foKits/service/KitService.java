@@ -5,6 +5,7 @@ import me.foesio.core.inventory.InventoryDepositResult;
 import me.foesio.core.inventory.InventoryDepositService;
 import me.foesio.core.inventory.OverflowPolicy;
 import me.foesio.core.message.FoMessageService;
+import me.foesio.core.sound.FoSoundService;
 import me.foesio.foKits.config.PluginSettings;
 import me.foesio.foKits.model.ClaimMode;
 import me.foesio.foKits.model.ClaimResult;
@@ -32,6 +33,7 @@ public class KitService {
     private final UserDataRepository userDataRepository;
     private final FoMessageService messages;
     private final InventoryDepositService inventoryDeposits;
+    private final FoSoundService sounds;
 
     public KitService(
             JavaPlugin plugin,
@@ -39,7 +41,8 @@ public class KitService {
             KitRepository kitRepository,
             UserDataRepository userDataRepository,
             FoMessageService messages,
-            InventoryDepositService inventoryDeposits
+            InventoryDepositService inventoryDeposits,
+            FoSoundService sounds
     ) {
         this.plugin = plugin;
         this.settings = settings;
@@ -47,6 +50,7 @@ public class KitService {
         this.userDataRepository = userDataRepository;
         this.messages = messages;
         this.inventoryDeposits = inventoryDeposits;
+        this.sounds = sounds;
     }
 
     public ClaimResult evaluate(Player player, KitDefinition kit) {
@@ -143,20 +147,45 @@ public class KitService {
     public void sendClaimFeedback(Player player, ClaimResult result) {
         String kitName = result.kit().getDisplayOrKey();
         switch (result.type()) {
-            case SUCCESS -> messages.send(player, "claim-success", Map.of("{kit}", kitName));
-            case DISABLED -> messages.send(player, "claim-disabled", Map.of("{kit}", kitName));
-            case MISSING_PERMISSION -> messages.send(player, "claim-missing-permission", Map.of(
-                    "{kit}", kitName,
-                    "{permission}", result.missingPermission()
-            ));
-            case WORLD_BLOCKED -> messages.send(player, "claim-world-blocked", Map.of("{kit}", kitName));
-            case COOLDOWN -> messages.send(player, "claim-cooldown", Map.of(
-                    "{kit}", kitName,
-                    "{time_remaining}", TimeUtil.formatDuration(result.remainingMillis())
-            ));
-            case CLAIMED_ONCE -> messages.send(player, "claim-once-used", Map.of("{kit}", kitName));
-            case NO_SPACE -> messages.send(player, "claim-no-space", Map.of("{kit}", kitName));
+            case SUCCESS -> {
+                sounds.playWithPitchVariation(player, "kit.claimed", 0.04f);
+                messages.send(player, "claim-success", Map.of("{kit}", kitName));
+            }
+            case DISABLED -> {
+                sounds.play(player, "kit.denied");
+                messages.send(player, "claim-disabled", Map.of("{kit}", kitName));
+            }
+            case MISSING_PERMISSION -> {
+                sounds.play(player, "kit.denied");
+                messages.send(player, "claim-missing-permission", Map.of(
+                        "{kit}", kitName,
+                        "{permission}", result.missingPermission()
+                ));
+            }
+            case WORLD_BLOCKED -> {
+                sounds.play(player, "kit.denied");
+                messages.send(player, "claim-world-blocked", Map.of("{kit}", kitName));
+            }
+            case COOLDOWN -> {
+                sounds.play(player, "kit.denied");
+                messages.send(player, "claim-cooldown", Map.of(
+                        "{kit}", kitName,
+                        "{time_remaining}", TimeUtil.formatDuration(result.remainingMillis())
+                ));
+            }
+            case CLAIMED_ONCE -> {
+                sounds.play(player, "kit.denied");
+                messages.send(player, "claim-once-used", Map.of("{kit}", kitName));
+            }
+            case NO_SPACE -> {
+                sounds.play(player, "kit.denied");
+                messages.send(player, "claim-no-space", Map.of("{kit}", kitName));
+            }
         }
+    }
+
+    public void playClaimDeniedSound(Player player) {
+        sounds.play(player, "kit.denied");
     }
 
     public KitViewState getViewState(Player player, KitDefinition kit) {

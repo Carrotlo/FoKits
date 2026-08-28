@@ -1,6 +1,7 @@
 package me.foesio.foKits.command;
 
 import me.foesio.core.message.FoMessageService;
+import me.foesio.core.sound.FoAdminSounds;
 import me.foesio.foKits.gui.GuiManager;
 import me.foesio.foKits.model.KitDefinition;
 import me.foesio.foKits.service.KitService;
@@ -22,16 +23,23 @@ public class FoKitsCommand implements CommandExecutor, TabCompleter {
     private final FoMessageService messages;
     private final KitRepository kits;
     private final KitService kitService;
+    private final FoAdminSounds adminSounds;
 
-    public FoKitsCommand(GuiManager guiManager, FoMessageService messages, KitRepository kits, KitService kitService) {
+    public FoKitsCommand(GuiManager guiManager, FoMessageService messages, KitRepository kits, KitService kitService, FoAdminSounds adminSounds) {
         this.guiManager = guiManager;
         this.messages = messages;
         this.kits = kits;
         this.kitService = kitService;
+        this.adminSounds = adminSounds;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!sender.hasPermission("fokits.use")) {
+            messages.send(sender, "no-permission");
+            adminSounds.updateError(sender);
+            return true;
+        }
         if (!(sender instanceof Player player)) {
             messages.send(sender, "players-only");
             return true;
@@ -45,6 +53,7 @@ public class FoKitsCommand implements CommandExecutor, TabCompleter {
         String requestedKey = KitDefinition.sanitizeKey(args[0]);
         Optional<KitDefinition> optionalKit = kits.get(requestedKey);
         if (optionalKit.isEmpty()) {
+            adminSounds.updateError(player);
             messages.send(player, "claim-kit-not-found", Map.of("{kit}", args[0]));
             return true;
         }

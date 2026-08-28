@@ -12,12 +12,10 @@ commands:
   fokits:
     description: Open kits GUI or claim a specific kit
     aliases: [ kits, kit ]
-    permission: fokits.use
     usage: /<command> [kit]
   fokitsadmin:
     description: FoKits admin command
     aliases: [ kitsadmin, kitadmin ]
-    permission: fokits.admin
     usage: /<command> <version|reload|editor|resetcooldown> [player] [kit]
 
 permissions:

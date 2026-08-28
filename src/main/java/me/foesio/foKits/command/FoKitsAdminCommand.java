@@ -43,8 +43,14 @@ public class FoKitsAdminCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!sender.hasPermission("fokits.admin")) {
+            messages.send(sender, "no-permission");
+            plugin.adminSounds().updateError(sender);
+            return true;
+        }
         if (args.length == 0) {
             messages.send(sender, "invalid-admin-usage");
+            plugin.adminSounds().updateError(sender);
             return true;
         }
 
@@ -57,6 +63,9 @@ public class FoKitsAdminCommand implements CommandExecutor, TabCompleter {
         if (sub.equals("reload")) {
             FoKits.ReloadSummary summary = plugin.reloadPluginData();
             if (!summary.result().successful()) {
+                if (sender instanceof Player player) {
+                    plugin.adminSounds().reloadError(player);
+                }
                 messages.send(sender, "reload-failed",
                         "{prefix}{bad}Reload failed at {theme}{step}{bad}. {muted}{error}",
                         Map.of(
@@ -64,6 +73,9 @@ public class FoKitsAdminCommand implements CommandExecutor, TabCompleter {
                                 "{error}", summary.result().errorMessage()
                         ));
                 return true;
+            }
+            if (sender instanceof Player player) {
+                plugin.adminSounds().reload(player);
             }
             messages.send(sender, "reload-success", Map.of(
                     "{kit_count}", String.valueOf(summary.loadedKits()),
@@ -85,6 +97,7 @@ public class FoKitsAdminCommand implements CommandExecutor, TabCompleter {
         if (sub.equals("resetcooldown")) {
             if (args.length < 2) {
                 messages.send(sender, "admin-resetcooldown-usage");
+                plugin.adminSounds().updateError(sender);
                 return true;
             }
 
@@ -95,6 +108,7 @@ public class FoKitsAdminCommand implements CommandExecutor, TabCompleter {
 
             if (!target.isOnline() && !target.hasPlayedBefore()) {
                 messages.send(sender, "player-not-found", Map.of("{player}", args[1]));
+                plugin.adminSounds().updateError(sender);
                 return true;
             }
 
@@ -103,11 +117,15 @@ public class FoKitsAdminCommand implements CommandExecutor, TabCompleter {
                 Optional<KitDefinition> optionalKit = plugin.getKitRepository().get(args[2]);
                 if (optionalKit.isEmpty()) {
                     messages.send(sender, "claim-kit-not-found", Map.of("{kit}", args[2]));
+                    plugin.adminSounds().updateError(sender);
                     return true;
                 }
 
                 KitDefinition kit = optionalKit.get();
                 userDataRepository.resetCooldown(target.getUniqueId(), kit.getKey());
+                if (sender instanceof Player player) {
+                    plugin.playSound(player, "kit.cooldown-reset");
+                }
                 messages.send(sender, "admin-reset-kit-cooldown-success", Map.of(
                         "{player}", playerName,
                         "{kit}", kit.getDisplayOrKey()
@@ -116,6 +134,9 @@ public class FoKitsAdminCommand implements CommandExecutor, TabCompleter {
             }
 
             int resetCount = userDataRepository.resetCooldowns(target.getUniqueId());
+            if (sender instanceof Player player) {
+                plugin.playSound(player, "kit.cooldown-reset");
+            }
             messages.send(sender, "admin-reset-cooldown-success", Map.of(
                     "{player}", playerName,
                     "{count}", String.valueOf(resetCount)
@@ -124,6 +145,7 @@ public class FoKitsAdminCommand implements CommandExecutor, TabCompleter {
         }
 
         messages.send(sender, "unknown-admin-arg");
+        plugin.adminSounds().updateError(sender);
         return true;
     }
 

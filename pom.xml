@@ -3,11 +3,12 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>me.foesio</groupId>
     <artifactId>FoKits</artifactId>
-    <version>1.7</version>
+    <version>1.8</version>
     <packaging>jar</packaging>
     <name>FoKits</name>
     <properties>
         <java.version>21</java.version>
+        <fo-plugin-core.version>1.0</fo-plugin-core.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
     <build>
@@ -69,7 +70,7 @@
         <dependency>
             <groupId>me.foesio</groupId>
             <artifactId>fo-plugin-core</artifactId>
-            <version>0.1.0-SNAPSHOT</version>
+            <version>${fo-plugin-core.version}</version>
         </dependency>
         <dependency>
             <groupId>io.papermc.paper</groupId>

@@ -1,0 +1,64 @@
+# Public player kit selector presentation. Layout, slot routing, and kit data
+# remain in config.yml and the kit data files.
+title: "&8ᴋɪᴛ ѕᴇʟᴇᴄᴛᴏʀ"
+
+filler:
+  material: GRAY_STAINED_GLASS_PANE
+  custom-model-data: ''
+  name: ' '
+  lore: []
+
+empty-kit-slot:
+  material: LIGHT_GRAY_STAINED_GLASS_PANE
+  custom-model-data: ''
+  name: ' '
+  lore: []
+
+states:
+  available:
+    lore:
+      - "{white}Left click to claim this kit."
+      - "{white}Right click to preview its contents."
+      - ""
+      - "{muted}Status: {good}Ready"
+  cooldown:
+    lore:
+      - "{white}Left click to try claiming."
+      - "{white}Right click to preview its contents."
+      - ""
+      - "{muted}Next claim in: {theme}{time_remaining}"
+  no-permission:
+    lore:
+      - "{white}Left click to try claiming."
+      - "{white}Right click to preview its contents."
+      - ""
+      - "{muted}Status: {bad}Missing permission"
+  claimed-once:
+    lore:
+      - "{white}Left click to try claiming."
+      - "{white}Right click to preview its contents."
+      - ""
+      - "{muted}Status: {bad}Already claimed"
+  disabled:
+    lore:
+      - "{white}This kit is currently disabled."
+
+preview:
+  title: "&8ᴋɪᴛ ᴘʀᴇᴠɪᴇᴡ &8- {kit}"
+  filler:
+    material: GRAY_STAINED_GLASS_PANE
+    custom-model-data: ''
+    name: ' '
+    lore: []
+  buttons:
+    back:
+      material: IRON_DOOR
+      custom-model-data: ''
+      name: '&e&lBACK'
+      lore:
+        - '&8ʙᴜᴛᴛᴏɴ'
+        - ' '
+        - '&eⓘ Information ↓'
+        - '&7&l | &fReturn to the previous menu.'
+        - ' '
+        - '&a→ Click to go back ←'

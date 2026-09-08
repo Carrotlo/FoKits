@@ -2,6 +2,7 @@ package me.foesio.foKits.gui;
 
 import me.foesio.core.FoCoreContext;
 import me.foesio.core.dialog.DialogButton;
+import me.foesio.core.dialog.DialogIcons;
 import me.foesio.core.dialog.DialogService;
 import me.foesio.core.dialog.DialogServiceFactory;
 import me.foesio.core.dialog.FallbackDialogService;
@@ -12,12 +13,14 @@ import me.foesio.core.editor.ChatPromptManager;
 import me.foesio.core.editor.EditorDialogInputs;
 import me.foesio.core.editor.EditorItemFactory;
 import me.foesio.core.gui.GuiButtonConfig;
+import me.foesio.core.gui.GuiTitles;
 import me.foesio.core.gui.GuiSlots;
 import me.foesio.core.gui.EntryBrowserClick;
 import me.foesio.core.gui.EntryBrowserHolder;
 import me.foesio.core.gui.EntryBrowserMenus;
 import me.foesio.core.gui.EntryBrowserRequest;
 import me.foesio.core.message.FoMessageService;
+import me.foesio.core.message.FoStyle;
 import me.foesio.core.selector.TriStateSelectionActionType;
 import me.foesio.core.selector.TriStateSelectionClick;
 import me.foesio.core.selector.TriStateSelectionHolder;
@@ -170,11 +173,11 @@ public class GuiManager implements Listener {
             guiSounds.open(player);
         }
         int size = settings.playerGuiRows() * 9;
-        Inventory inventory = Bukkit.createInventory(player, size, guiTitle(settings.playerGuiTitle()));
+        Inventory inventory = Bukkit.createInventory(player, size, GuiTitles.format(settings.playerGuiTitle()));
         GuiSession session = new GuiSession(GuiType.PLAYER_KITS, "");
 
         if (settings.fillBackground()) {
-            ItemStack filler = makeItem(settings.fillerMaterial(), " ", List.of(), null);
+            ItemStack filler = settings.playerGuiFiller(player);
             for (int i = 0; i < size; i++) {
                 inventory.setItem(i, filler);
             }
@@ -204,7 +207,7 @@ public class GuiManager implements Listener {
             }
         }
 
-        ItemStack emptyKitSlot = makeItem(Material.LIGHT_GRAY_STAINED_GLASS_PANE, " ", List.of(), null);
+        ItemStack emptyKitSlot = settings.emptyKitSlot(player);
         for (Integer slot : kitSlots) {
             if (slot != null && slot >= 0 && slot < size) {
                 inventory.setItem(slot, emptyKitSlot.clone());
@@ -231,10 +234,10 @@ public class GuiManager implements Listener {
             guiSounds.open(player);
         }
         Inventory inventory = Bukkit.createInventory(player, PREVIEW_SIZE,
-                guiTitle("&8ᴋɪᴛ ᴘʀᴇᴠɪᴇᴡ &8- " + kit.getDisplayOrKey()));
+                GuiTitles.format(settings.previewTitle(kit.getDisplayOrKey())));
         GuiSession session = new GuiSession(GuiType.PLAYER_PREVIEW, kit.getKey());
 
-        ItemStack filler = makeItem(Material.GRAY_STAINED_GLASS_PANE, " ", List.of(), null);
+        ItemStack filler = settings.previewFiller(player);
         for (int slot = 0; slot < PREVIEW_SIZE; slot++) {
             inventory.setItem(slot, filler);
         }
@@ -252,10 +255,10 @@ public class GuiManager implements Listener {
         }
 
         if (backToAdmin) {
-            inventory.setItem(8, buttons.back());
+            inventory.setItem(8, settings.previewBack(player));
             session.getActions().put(8, "back:admin-kit-settings:" + kit.getKey());
         } else {
-            inventory.setItem(8, buttons.back());
+            inventory.setItem(8, settings.previewBack(player));
             session.getActions().put(8, "back:player-kits");
         }
 
@@ -275,8 +278,8 @@ public class GuiManager implements Listener {
         GuiSession session = new GuiSession(GuiType.ADMIN_ROOT, "");
 
         fill(inventory, Material.GRAY_STAINED_GLASS_PANE);
-        inventory.setItem(11, makeItem(Material.CHEST, "{theme}Kit Editor", List.of("{white}Create, edit and delete kits."), null));
-        inventory.setItem(15, makeItem(Material.PAINTING, "{theme}Main GUI Settings", List.of("{white}Edit the player /kits menu."), null));
+        inventory.setItem(11, makeButton(player, FoStyle.THEME, Material.CHEST, "Kit Editor", List.of("{white}Create, edit and delete kits."), "manage kits"));
+        inventory.setItem(15, makeButton(player, FoStyle.THEME, Material.PAINTING, "Main GUI Settings", List.of("{white}Edit the player /kits menu."), "edit GUI settings"));
 
         session.getActions().put(11, "open:admin-kit-list:reset");
         session.getActions().put(15, "open:admin-gui-settings");
@@ -300,7 +303,7 @@ public class GuiManager implements Listener {
         }
 
         List<EntryBrowserRequest.Entry> entries = list.stream()
-                .map(kit -> EntryBrowserRequest.Entry.of(kit.getKey(), buildAdminKitItem(kit)))
+                .map(kit -> EntryBrowserRequest.Entry.of(kit.getKey(), buildAdminKitItem(player, kit)))
                 .toList();
         int maxPage = EntryBrowserMenus.maxPage(EntryBrowserRequest.builder().entries(entries).build());
         int resolvedPage = Math.max(0, Math.min(page, maxPage));
@@ -314,13 +317,13 @@ public class GuiManager implements Listener {
                 .filter(normalizedSearch)
                 .buttons(buttons)
                 .showBack(true)
-                .addButton(makeItem(Material.ANVIL, "{theme}Create Kit", List.of(
+                .addButton(makeButton(player, FoStyle.GOOD, Material.ANVIL, "Create Kit", List.of(
                         "{white}Click to create a new kit.",
-                        "{white}Expected key: letters, numbers, _ or -"), null))
+                        "{white}Expected key: letters, numbers, _ or -"), "create a kit"))
                 .emptyItem(makeItem(Material.PAPER, "{bad}No Kits", List.of(
                         "{white}No kits match the current search."), null))
                 .build();
-        player.openInventory(EntryBrowserMenus.createInventory(request));
+        player.openInventory(EntryBrowserMenus.createInventory(player, request));
     }
 
     public void openAdminKitSettings(Player player, String kitKey) {
@@ -337,13 +340,12 @@ public class GuiManager implements Listener {
 
         fill(inventory, Material.GRAY_STAINED_GLASS_PANE);
 
-        inventory.setItem(10, makeItem(kit.isEnabled() ? Material.LIME_DYE : Material.RED_DYE,
-                kit.isEnabled() ? "{good}Enabled" : "{bad}Disabled",
-                List.of("{white}Toggle whether players can claim this kit."), null));
-        inventory.setItem(11, makeItem(Material.NAME_TAG, "{theme}Display Name",
-                List.of("{white}Current: {theme}" + safe(kit.getDisplayName()), "{white}Click to edit in chat."), null));
-        inventory.setItem(12, makeItem(Material.OAK_SIGN, "{theme}Rename Kit Key",
-                List.of("{white}Current key: {theme}" + kit.getKey(), "{white}Click to rename in chat."), null));
+        inventory.setItem(10, makeButton(player, kit.isEnabled() ? FoStyle.GOOD : FoStyle.BAD,
+                kit.isEnabled() ? Material.LIME_DYE : Material.RED_DYE, "Enabled", List.of("{white}State: " + (kit.isEnabled() ? "{good}ON" : "{bad}OFF")), "toggle kit enabled"));
+        inventory.setItem(11, makeButton(player, FoStyle.THEME, Material.NAME_TAG, "Display Name",
+                List.of("{white}Current: {theme}" + safe(kit.getDisplayName()), "{white}Click to edit in chat."), "edit display name"));
+        inventory.setItem(12, makeButton(player, FoStyle.THEME, Material.OAK_SIGN, "Rename Kit Key",
+                List.of("{white}Current key: {theme}" + kit.getKey(), "{white}Click to rename in chat."), "rename kit key"));
         boolean hasIconItem = kit.getIconItem() != null && !kit.getIconItem().getType().isAir();
         inventory.setItem(13, makeDisplayItem(
                 hasIconItem ? kit.getIconItem() : new ItemStack(Material.ITEM_FRAME),
@@ -364,26 +366,26 @@ public class GuiManager implements Listener {
                         "{white}Preview remains available."
                 )
         ));
-        inventory.setItem(15, makeItem(Material.CHEST_MINECART, "{theme}Edit Kit Items",
-                List.of("{white}Open item editor GUI.", "{white}Supports full item meta."), null));
-        inventory.setItem(16, makeItem(Material.ENDER_EYE, "{theme}Preview Kit",
-                List.of("{white}Open the player-style preview."), null));
+        inventory.setItem(15, makeButton(player, FoStyle.THEME, Material.CHEST_MINECART, "Edit Kit Items",
+                List.of("{white}Open item editor GUI.", "{white}Supports full item meta."), "edit kit items"));
+        inventory.setItem(16, makeButton(player, FoStyle.THEME, Material.ENDER_EYE, "Preview Kit",
+                List.of("{white}Open the player-style preview."), "preview kit"));
 
-        inventory.setItem(19, makeItem(Material.CLOCK, "{theme}Claim Mode",
+        inventory.setItem(19, makeButton(player, FoStyle.THEME, Material.CLOCK, "Claim Mode",
                 List.of("{white}Current: {theme}" + kit.getClaimMode().name().toLowerCase(Locale.ROOT),
-                        "{white}Click to toggle cooldown/one-time."), null));
-        inventory.setItem(20, makeItem(Material.REPEATER, "{theme}Cooldown",
+                        "{white}Click to toggle cooldown/one-time."), "cycle claim mode"));
+        inventory.setItem(20, makeButton(player, FoStyle.THEME, Material.REPEATER, "Cooldown",
                 List.of("{white}Current: {theme}" + TimeUtil.formatDuration(kit.getCooldownMillis()),
-                        "{white}Example: 12h30m"), null));
-        inventory.setItem(21, makeItem(Material.TRIPWIRE_HOOK, "{theme}Required Permission",
+                        "{white}Example: 12h30m"), "edit cooldown"));
+        inventory.setItem(21, makeButton(player, FoStyle.THEME, Material.TRIPWIRE_HOOK, "Required Permission",
                 List.of("{white}Current: {theme}" + (kit.getRequiredPermission().isBlank() ? "none" : kit.getRequiredPermission()),
-                        "{white}Use 'none' to clear."), null));
-        inventory.setItem(22, makeItem(Material.HOPPER, "{theme}Order Index",
-                List.of("{white}Current: {theme}" + kit.getOrderIndex(), "{white}Lower index appears first."), null));
-        inventory.setItem(23, makeItem(kit.isBroadcastOnClaim() ? Material.LIME_DYE : Material.RED_DYE,
-                "{theme}Broadcast On Claim",
+                        "{white}Use 'none' to clear."), "edit required permission"));
+        inventory.setItem(22, makeButton(player, FoStyle.THEME, Material.HOPPER, "Order Index",
+                List.of("{white}Current: {theme}" + kit.getOrderIndex(), "{white}Lower index appears first."), "edit order index"));
+        inventory.setItem(23, makeButton(player, kit.isBroadcastOnClaim() ? FoStyle.GOOD : FoStyle.BAD,
+                kit.isBroadcastOnClaim() ? Material.LIME_DYE : Material.RED_DYE, "Broadcast On Claim",
                 List.of("{white}Current: " + (kit.isBroadcastOnClaim() ? "{good}enabled" : "{bad}disabled"),
-                        "{white}Click to toggle."), null));
+                        "{white}Click to toggle."), "toggle broadcast"));
         List<String> commandLore = new ArrayList<>();
         commandLore.add("{white}Current: {theme}" + kit.getCommandsOnClaim().size() + " command(s)");
         if (kit.getCommandsOnClaim().isEmpty()) {
@@ -399,13 +401,13 @@ public class GuiManager implements Listener {
         }
         commandLore.add("{white}Input format: cmd1|cmd2|cmd3");
         commandLore.add("{white}Use 'none' to clear.");
-        inventory.setItem(24, makeItem(Material.COMMAND_BLOCK, "{theme}Commands On Claim", commandLore, null));
-        inventory.setItem(25, EditorItemFactory.worlds(0, kit.getDenyWorlds().size(), "Allowed"));
-        inventory.setItem(ADMIN_KIT_DELETE_SLOT, makeItem(Material.LAVA_BUCKET, "{bad}Delete Kit", List.of(
+        inventory.setItem(24, makeButton(player, FoStyle.THEME, Material.COMMAND_BLOCK, "Commands On Claim", commandLore, "edit claim commands"));
+        inventory.setItem(25, EditorItemFactory.worlds(player, 0, kit.getDenyWorlds().size(), "Allowed"));
+        inventory.setItem(ADMIN_KIT_DELETE_SLOT, makeButton(player, FoStyle.BAD, Material.LAVA_BUCKET, "Delete Kit", List.of(
                 "{white}Open confirmation first.",
                 "{bad}This permanently deletes the kit."
-        ), null));
-        inventory.setItem(backSlot, buttons.back());
+        ), "delete kit"));
+        inventory.setItem(backSlot, buttons.back(player));
 
         session.getActions().put(10, "toggle-enabled");
         session.getActions().put(11, "edit-display-name");
@@ -433,14 +435,14 @@ public class GuiManager implements Listener {
         Inventory inventory = Bukkit.createInventory(player, 27, guiTitle("&8ᴄᴏɴꜰɪʀᴍ ᴅᴇʟᴇᴛᴇ"));
 
         fill(inventory, Material.GRAY_STAINED_GLASS_PANE);
-        inventory.setItem(DELETE_CONFIRM_CANCEL_SLOT, makeItem(Material.BARRIER, "{bad}Cancel", List.of(
+        inventory.setItem(DELETE_CONFIRM_CANCEL_SLOT, makeButton(player, FoStyle.BAD, Material.RED_WOOL, "Cancel", List.of(
                 "{white}Return to the kit editor."
-        ), null));
-        inventory.setItem(DELETE_CONFIRM_CONFIRM_SLOT, makeItem(Material.LAVA_BUCKET, "{bad}Confirm Delete", List.of(
+        ), "cancel deletion"));
+        inventory.setItem(DELETE_CONFIRM_CONFIRM_SLOT, makeButton(player, FoStyle.BAD, Material.LAVA_BUCKET, "Confirm Delete", List.of(
                 "{white}Kit: {theme}" + kitKey,
                 "{white}Delete this kit now.",
                 "{bad}This cannot be undone."
-        ), null));
+        ), "confirm deletion"));
 
         session.getActions().put(DELETE_CONFIRM_CANCEL_SLOT, "cancel-delete-kit");
         session.getActions().put(DELETE_CONFIRM_CONFIRM_SLOT, "confirm-delete-kit");
@@ -474,12 +476,12 @@ public class GuiManager implements Listener {
             inventory.setItem(9 + i, cloneOrNull(contents, i));
         }
 
-        inventory.setItem(47, makeItem(Material.CHEST, "{theme}Copy From Inventory", List.of(
+        inventory.setItem(47, makeButton(player, FoStyle.GOOD, Material.CHEST, "Copy From Inventory", List.of(
                 "{white}Copy storage, armor and offhand.",
                 "{white}Keeps full item data."
-        ), null));
-        inventory.setItem(GuiSlots.bottomMiddleSlot(6), buttons.back());
-        inventory.setItem(51, makeItem(Material.BARRIER, "{bad}Clear Items", List.of("{white}Clear all item slots."), null));
+        ), "copy items from inventory"));
+        inventory.setItem(GuiSlots.bottomMiddleSlot(6), buttons.back(player));
+        inventory.setItem(51, makeButton(player, FoStyle.BAD, Material.RED_WOOL, "Clear Items", List.of("{white}Clear all item slots."), "clear items"));
 
         session.getActions().put(47, "copy-from-inventory");
         session.getActions().put(GuiSlots.bottomMiddleSlot(6), "back-items");
@@ -502,9 +504,9 @@ public class GuiManager implements Listener {
 
         fill(inventory, Material.GRAY_STAINED_GLASS_PANE);
         inventory.setItem(CLAIMED_ITEM_EDIT_SLOT, kit.getClaimedDisplayItem() == null ? null : kit.getClaimedDisplayItem().clone());
-        inventory.setItem(18, makeItem(Material.LIME_CONCRETE, "{good}Save & Back", List.of("{white}Save claimed-state item and return."), null));
-        inventory.setItem(22, makeItem(Material.BARRIER, "{bad}Clear Item", List.of("{white}Remove the claimed-state item."), null));
-        inventory.setItem(26, makeItem(Material.RED_CONCRETE, "{bad}Cancel", List.of("{white}Discard changes and return."), null));
+        inventory.setItem(18, makeButton(player, FoStyle.GOOD, Material.LIME_CONCRETE, "Save & Back", List.of("{white}Save claimed-state item and return."), "save and go back"));
+        inventory.setItem(22, makeButton(player, FoStyle.BAD, Material.RED_WOOL, "Clear Item", List.of("{white}Remove the claimed-state item."), "clear item"));
+        inventory.setItem(26, makeButton(player, FoStyle.BAD, Material.RED_CONCRETE, "Cancel", List.of("{white}Discard changes and return."), "cancel changes"));
 
         session.getActions().put(18, "save-claimed-item");
         session.getActions().put(22, "clear-claimed-item");
@@ -527,9 +529,9 @@ public class GuiManager implements Listener {
 
         fill(inventory, Material.GRAY_STAINED_GLASS_PANE);
         inventory.setItem(CLAIMED_ITEM_EDIT_SLOT, kit.getIconItem() == null ? null : kit.getIconItem().clone());
-        inventory.setItem(18, makeItem(Material.LIME_CONCRETE, "{good}Save & Back", List.of("{white}Save kit icon item and return."), null));
-        inventory.setItem(22, makeItem(Material.BARRIER, "{bad}Clear Item", List.of("{white}Remove the kit icon item."), null));
-        inventory.setItem(26, makeItem(Material.RED_CONCRETE, "{bad}Cancel", List.of("{white}Discard changes and return."), null));
+        inventory.setItem(18, makeButton(player, FoStyle.GOOD, Material.LIME_CONCRETE, "Save & Back", List.of("{white}Save kit icon item and return."), "save and go back"));
+        inventory.setItem(22, makeButton(player, FoStyle.BAD, Material.RED_WOOL, "Clear Item", List.of("{white}Remove the kit icon item."), "clear item"));
+        inventory.setItem(26, makeButton(player, FoStyle.BAD, Material.RED_CONCRETE, "Cancel", List.of("{white}Discard changes and return."), "cancel changes"));
 
         session.getActions().put(18, "save-icon-item");
         session.getActions().put(22, "clear-icon-item");
@@ -580,19 +582,19 @@ public class GuiManager implements Listener {
 
         fill(inventory, Material.GRAY_STAINED_GLASS_PANE);
 
-        inventory.setItem(10, makeItem(Material.CHEST, "{theme}Edit /kits Layout",
-                List.of("{white}Use chest markers for kit slots.", "{white}Close layout editor to save."), null));
-        inventory.setItem(11, makeItem(Material.NAME_TAG, "{theme}Title",
-                List.of("{white}Current: {theme}" + settings.playerGuiTitle(), "{white}Click to edit in chat."), null));
-        inventory.setItem(13, makeItem(Material.CHEST, "{theme}Rows",
-                List.of("{white}Current: {theme}" + settings.playerGuiRows(), "{white}Use values 1-6."), null));
-        inventory.setItem(15, makeItem(settings.fillBackground() ? Material.LIME_DYE : Material.RED_DYE,
-                "{theme}Fill Background",
+        inventory.setItem(10, makeButton(player, FoStyle.THEME, Material.CHEST, "Edit /kits Layout",
+                List.of("{white}Use chest markers for kit slots.", "{white}Close layout editor to save."), "edit GUI layout"));
+        inventory.setItem(11, makeButton(player, FoStyle.THEME, Material.NAME_TAG, "Title",
+                List.of("{white}Current: {theme}" + settings.playerGuiTitle(), "{white}Click to edit in chat."), "edit GUI title"));
+        inventory.setItem(13, makeButton(player, FoStyle.THEME, Material.CHEST, "Rows",
+                List.of("{white}Current: {theme}" + settings.playerGuiRows(), "{white}Use values 1-6."), "edit GUI rows"));
+        inventory.setItem(15, makeButton(player, settings.fillBackground() ? FoStyle.GOOD : FoStyle.BAD,
+                settings.fillBackground() ? Material.LIME_DYE : Material.RED_DYE, "Fill Background",
                 List.of("{white}Current: " + (settings.fillBackground() ? "{good}enabled" : "{bad}disabled"),
-                        "{white}Click to toggle."), null));
-        inventory.setItem(16, makeItem(Material.GRAY_STAINED_GLASS_PANE, "{theme}Filler Material",
-                List.of("{white}Current: {theme}" + settings.fillerMaterial().name(), "{white}Click to edit in chat."), null));
-        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back());
+                        "{white}Click to toggle."), "toggle GUI background"));
+        inventory.setItem(16, makeButton(player, FoStyle.THEME, Material.GRAY_STAINED_GLASS_PANE, "Filler Material",
+                List.of("{white}Current: {theme}" + settings.fillerMaterial().name(), "{white}Click to edit in chat."), "edit filler material"));
+        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back(player));
 
         session.getActions().put(10, "open-gui-layout-editor");
         session.getActions().put(11, "edit-gui-title");
@@ -1681,7 +1683,7 @@ public class GuiManager implements Listener {
             }
         };
         Runnable cancel = () -> {
-            if (activeDialogs.support().canUseNativeDialogs()) {
+            if (activeDialogs.support().canUseNativeDialogs(player)) {
                 editorSounds.back(player);
                 messages.send(player, "prompt-cancelled");
             }
@@ -1717,7 +1719,7 @@ public class GuiManager implements Listener {
     }
 
     private void warnNativeFallback(Player player, NativeDialogSupport support, boolean openedNative) {
-        if (openedNative || support == null || !support.configEnabled() || support.canUseNativeDialogs() || !support.warnOnFallback()) {
+        if (openedNative || support == null || !support.configEnabled() || support.canUseNativeDialogs(player) || !support.warnOnFallback()) {
             return;
         }
         if (!player.hasPermission("fokits.admin")) {
@@ -1821,16 +1823,24 @@ public class GuiManager implements Listener {
 
         List<String> renderedLore = new ArrayList<>();
         for (String line : lore) {
-            renderedLore.add(messages.renderTemplate(line, replacements));
+            renderedLore.add(messages.renderTemplateForViewer(player, line, replacements));
         }
 
         ItemStack item = resolveBaseKitDisplayItem(state, kit);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            if (!meta.hasDisplayName()) {
-                meta.setDisplayName(messages.renderTemplate("{theme}" + kit.getDisplayOrKey(), Map.of()));
+            String displayName = meta.hasDisplayName()
+                    ? meta.getDisplayName()
+                    : messages.renderTemplateForViewer(player, "{theme}" + kit.getDisplayOrKey(), Map.of());
+            List<String> combinedLore = new ArrayList<>();
+            if (meta.hasLore()) {
+                combinedLore.addAll(meta.getLore());
             }
-            meta.setLore(renderedLore);
+            combinedLore.addAll(renderedLore);
+            if (!DialogIcons.applyItemMeta(meta, player, displayName, combinedLore)) {
+                meta.setDisplayName(DialogIcons.fallbackText(displayName));
+                meta.setLore(combinedLore.stream().map(DialogIcons::fallbackText).toList());
+            }
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             item.setItemMeta(meta);
         }
@@ -1858,7 +1868,7 @@ public class GuiManager implements Listener {
         return fallback;
     }
 
-    private ItemStack buildAdminKitItem(KitDefinition kit) {
+    private ItemStack buildAdminKitItem(Player player, KitDefinition kit) {
         List<String> lore = new ArrayList<>();
         lore.add("{white}Left click: open kit settings");
         lore.add("{white}Right click: preview kit");
@@ -2090,6 +2100,14 @@ public class GuiManager implements Listener {
         Material safeMaterial = material == null || material.isAir() ? Material.STONE : material;
         ItemStack item = new ItemStack(safeMaterial);
         return makeDisplayItem(item, displayName, lore, customModelData);
+    }
+
+    private ItemStack makeButton(Player player, String color, Material material, String label, List<String> information, String action) {
+        String renderedLabel = messages.renderTemplateForViewer(player, label, Map.of());
+        List<String> renderedInformation = information == null ? List.of() : information.stream()
+                .map(line -> messages.renderTemplateForViewer(player, line, Map.of()))
+                .toList();
+        return EditorItemFactory.button(player, material, color, renderedLabel, renderedInformation, action);
     }
 
     private ItemStack makeDisplayItem(ItemStack base, String displayName, List<String> lore) {

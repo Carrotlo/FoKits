@@ -64,6 +64,7 @@ public final class FoKits extends JavaPlugin {
 
         settings = new PluginSettings(this);
         messages = FoMessageService.load(this, messageMigrations());
+        migrateSprites();
         updates = core.createUpdateNotices(messages, MODRINTH_PROJECT_ID, adminSounds);
 
         userDataRepository = new UserDataRepository(this);
@@ -107,6 +108,7 @@ public final class FoKits extends JavaPlugin {
         int[] loadedKits = {kitRepository.getAll().size()};
         FoReloadResult result = FoReloadRegistry.create()
                 .add("config", configManager::reload)
+                .add("gui", settings::reloadGui)
                 .addMessages(messages)
                 .add("sounds", sounds::reload)
                 .add("dialogs", guiManager::reloadDialogService)
@@ -164,6 +166,33 @@ public final class FoKits extends JavaPlugin {
         return FoMessageMigrations.create()
                 .add(this::migrateLegacyConfigMessages)
                 .build();
+    }
+
+    private void migrateSprites() {
+        messages.migrateToVersion(core.migrations(), 9, config -> {
+            boolean changed = false;
+            changed |= FoMessageService.addMissingToken(config, "tokens.prefix", ":chest:", null);
+            changed |= FoMessageService.addMissingToken(config, "invalid-admin-usage", ":paper:");
+            changed |= FoMessageService.addMissingToken(config, "admin-reset-cooldown-success", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "admin-reset-kit-cooldown-success", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "player-not-found", ":player_head:");
+            changed |= FoMessageService.addMissingToken(config, "editor-opened", ":book:");
+            changed |= FoMessageService.addMissingToken(config, "reload-success", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "reload-failed", ":redstone:");
+            changed |= FoMessageService.addMissingToken(config, "claim-success", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "claim-no-space", ":chest:");
+            changed |= FoMessageService.addMissingToken(config, "deleted", ":lava_bucket:");
+            changed |= FoMessageService.addMissingToken(config, "created", ":emerald:");
+            return true;
+        });
+        messages.migrateToVersion(core.migrations(), 10, config -> {
+            String oldPrefix = ":chest: {theme}FoKits &8» {muted}";
+            if (!oldPrefix.equals(config.getString("tokens.prefix"))) {
+                return true;
+            }
+            config.set("tokens.prefix", ":chest_minecart: {theme}FoKits &8» {muted}");
+            return true;
+        });
     }
 
     private boolean migrateLegacyConfigMessages(FileConfiguration messagesConfig) {

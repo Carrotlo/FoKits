@@ -1,5 +1,5 @@
 # FoKits main configuration
-config-version: 8
+config-version: 9
 
 inventory:
   # If false, claiming is denied when a player cannot fit all required items.

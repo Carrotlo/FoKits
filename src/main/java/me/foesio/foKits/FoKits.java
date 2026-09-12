@@ -2,6 +2,8 @@ package me.foesio.foKits;
 
 import me.foesio.core.FoCoreContext;
 import me.foesio.core.FoPluginCore;
+import me.foesio.core.config.ResourceFiles;
+import me.foesio.core.gui.GuiResourceLoader;
 import me.foesio.core.message.FoMessageMigrations;
 import me.foesio.core.message.FoMessageService;
 import me.foesio.core.reload.FoReloadRegistry;
@@ -27,9 +29,14 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.Objects;
 
 public final class FoKits extends JavaPlugin {
@@ -193,6 +200,109 @@ public final class FoKits extends JavaPlugin {
             config.set("tokens.prefix", ":chest_minecart: {theme}FoKits &8» {muted}");
             return true;
         });
+        migrateGuiSprites();
+    }
+
+    private void migrateGuiSprites() {
+        core.migrations().runToVersion(11, () -> {
+            String resource = "guis/player-kits.yml";
+            GuiResourceLoader.loadAndBackfill(this, resource);
+            File guiFile = ResourceFiles.dataFile(this, resource);
+            byte[] original;
+            try {
+                original = Files.readAllBytes(guiFile.toPath());
+            } catch (IOException exception) {
+                getLogger().warning("Could not read FoKits GUI resource for sprite migration: " + exception.getMessage());
+                return false;
+            }
+
+            YamlConfiguration gui = YamlConfiguration.loadConfiguration(guiFile);
+            boolean changed = false;
+            changed |= migrateGuiValue(gui, "preview.buttons.back.name", "&e&lBACK", ":iron_door: &e&lBACK");
+            changed |= migrateGuiLore(gui, "states.available.lore", List.of(
+                    "{white}Left click to claim this kit.",
+                    "{white}Right click to preview its contents.",
+                    "",
+                    "{muted}Status: {good}Ready"
+            ), List.of(
+                    "{white}Left click to claim this kit.",
+                    "{white}Right click to preview its contents.",
+                    "",
+                    ":lime_dye: {muted}Status: {good}Ready"
+            ));
+            changed |= migrateGuiLore(gui, "states.cooldown.lore", List.of(
+                    "{white}Left click to try claiming.",
+                    "{white}Right click to preview its contents.",
+                    "",
+                    "{muted}Next claim in: {theme}{time_remaining}"
+            ), List.of(
+                    "{white}Left click to try claiming.",
+                    "{white}Right click to preview its contents.",
+                    "",
+                    ":clock: {muted}Next claim in: {theme}{time_remaining}"
+            ));
+            changed |= migrateGuiLore(gui, "states.no-permission.lore", List.of(
+                    "{white}Left click to try claiming.",
+                    "{white}Right click to preview its contents.",
+                    "",
+                    "{muted}Status: {bad}Missing permission"
+            ), List.of(
+                    "{white}Left click to try claiming.",
+                    "{white}Right click to preview its contents.",
+                    "",
+                    ":red_dye: {muted}Status: {bad}Missing permission"
+            ));
+            changed |= migrateGuiLore(gui, "states.claimed-once.lore", List.of(
+                    "{white}Left click to try claiming.",
+                    "{white}Right click to preview its contents.",
+                    "",
+                    "{muted}Status: {bad}Already claimed"
+            ), List.of(
+                    "{white}Left click to try claiming.",
+                    "{white}Right click to preview its contents.",
+                    "",
+                    ":red_dye: {muted}Status: {bad}Already claimed"
+            ));
+            changed |= migrateGuiLore(gui, "states.disabled.lore",
+                    List.of("{white}This kit is currently disabled."),
+                    List.of(":barrier: {white}This kit is currently disabled."));
+            if (!changed) {
+                return true;
+            }
+
+            File backup = new File(guiFile.getParentFile(), guiFile.getName() + ".pre-sprite-backup");
+            try {
+                if (!backup.exists()) {
+                    Files.copy(guiFile.toPath(), backup.toPath(), StandardCopyOption.COPY_ATTRIBUTES);
+                }
+                gui.save(guiFile);
+                return true;
+            } catch (IOException exception) {
+                try {
+                    Files.write(guiFile.toPath(), original);
+                } catch (IOException rollbackException) {
+                    getLogger().warning("Could not roll back FoKits GUI sprite migration: " + rollbackException.getMessage());
+                }
+                getLogger().warning("Could not save FoKits GUI sprite migration: " + exception.getMessage());
+                return false;
+            }
+        });
+    }
+
+    private boolean migrateGuiValue(YamlConfiguration gui, String path, String oldValue, String newValue) {
+        if (!oldValue.equals(gui.getString(path))) {
+            return false;
+        }
+        gui.set(path, newValue);
+        return true;
+    }
+
+    private boolean migrateGuiLore(YamlConfiguration gui, String path, List<String> oldValue, List<String> newValue) {
+        if (!oldValue.equals(gui.getStringList(path))) {
+            return false;
+        }
+        gui.set(path, newValue);
+        return true;
     }
 
     private boolean migrateLegacyConfigMessages(FileConfiguration messagesConfig) {

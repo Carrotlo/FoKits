@@ -20,28 +20,28 @@ states:
       - "{white}Left click to claim this kit."
       - "{white}Right click to preview its contents."
       - ""
-      - "{muted}Status: {good}Ready"
+      - ":lime_dye: {muted}Status: {good}Ready"
   cooldown:
     lore:
       - "{white}Left click to try claiming."
       - "{white}Right click to preview its contents."
       - ""
-      - "{muted}Next claim in: {theme}{time_remaining}"
+      - ":clock: {muted}Next claim in: {theme}{time_remaining}"
   no-permission:
     lore:
       - "{white}Left click to try claiming."
       - "{white}Right click to preview its contents."
       - ""
-      - "{muted}Status: {bad}Missing permission"
+      - ":red_dye: {muted}Status: {bad}Missing permission"
   claimed-once:
     lore:
       - "{white}Left click to try claiming."
       - "{white}Right click to preview its contents."
       - ""
-      - "{muted}Status: {bad}Already claimed"
+      - ":red_dye: {muted}Status: {bad}Already claimed"
   disabled:
     lore:
-      - "{white}This kit is currently disabled."
+      - ":barrier: {white}This kit is currently disabled."
 
 preview:
   title: "&8ᴋɪᴛ ᴘʀᴇᴠɪᴇᴡ &8- {kit}"
@@ -54,7 +54,7 @@ preview:
     back:
       material: IRON_DOOR
       custom-model-data: ''
-      name: '&e&lBACK'
+      name: ':iron_door: &e&lBACK'
       lore:
         - '&8ʙᴜᴛᴛᴏɴ'
         - ' '

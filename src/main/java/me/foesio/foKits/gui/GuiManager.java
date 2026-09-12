@@ -320,7 +320,7 @@ public class GuiManager implements Listener {
                 .addButton(makeButton(player, FoStyle.GOOD, Material.ANVIL, "Create Kit", List.of(
                         "{white}Click to create a new kit.",
                         "{white}Expected key: letters, numbers, _ or -"), "create a kit"))
-                .emptyItem(makeItem(Material.PAPER, "{bad}No Kits", List.of(
+                .emptyItem(makeItem(player, Material.PAPER, "{bad}No Kits", List.of(
                         "{white}No kits match the current search."), null))
                 .build();
         player.openInventory(EntryBrowserMenus.createInventory(player, request));
@@ -347,25 +347,23 @@ public class GuiManager implements Listener {
         inventory.setItem(12, makeButton(player, FoStyle.THEME, Material.OAK_SIGN, "Rename Kit Key",
                 List.of("{white}Current key: {theme}" + kit.getKey(), "{white}Click to rename in chat."), "rename kit key"));
         boolean hasIconItem = kit.getIconItem() != null && !kit.getIconItem().getType().isAir();
-        inventory.setItem(13, makeDisplayItem(
-                hasIconItem ? kit.getIconItem() : new ItemStack(Material.ITEM_FRAME),
-                "{theme}Kit Icon Item",
+        inventory.setItem(13, makeButton(player, FoStyle.THEME,
+                hasIconItem ? kit.getIconItem().getType() : Material.ITEM_FRAME,
+                "Kit Icon Item",
                 List.of(
                         "{white}Current: {theme}" + (hasIconItem ? "set" : "not set"),
                         "{white}Set the icon shown in kit menus.",
                         "{white}Keeps full item data."
-                )
-        ));
+                ), "edit kit icon item"));
         boolean hasClaimedDisplay = kit.getClaimedDisplayItem() != null && !kit.getClaimedDisplayItem().getType().isAir();
-        inventory.setItem(14, makeDisplayItem(
-                hasClaimedDisplay ? kit.getClaimedDisplayItem() : new ItemStack(Material.RED_DYE),
-                "{theme}Claimed-State Item",
+        inventory.setItem(14, makeButton(player, FoStyle.THEME,
+                hasClaimedDisplay ? kit.getClaimedDisplayItem().getType() : Material.RED_DYE,
+                "Claimed-State Item",
                 List.of(
                         "{white}Current: {theme}" + (hasClaimedDisplay ? "set" : "not set"),
                         "{white}Set the icon shown after one-time claim.",
                         "{white}Preview remains available."
-                )
-        ));
+                ), "edit claimed-state item"));
         inventory.setItem(15, makeButton(player, FoStyle.THEME, Material.CHEST_MINECART, "Edit Kit Items",
                 List.of("{white}Open item editor GUI.", "{white}Supports full item meta."), "edit kit items"));
         inventory.setItem(16, makeButton(player, FoStyle.THEME, Material.ENDER_EYE, "Preview Kit",
@@ -559,7 +557,7 @@ public class GuiManager implements Listener {
             if (slot == null || slot < 0 || slot >= size) {
                 continue;
             }
-            inventory.setItem(slot, makeItem(
+            inventory.setItem(slot, makeItem(player,
                     KIT_SLOT_MARKER_MATERIAL,
                     "{theme}Kit Slot Marker",
                     List.of(
@@ -1683,7 +1681,7 @@ public class GuiManager implements Listener {
             }
         };
         Runnable cancel = () -> {
-            if (activeDialogs.support().canUseNativeDialogs(player)) {
+            if (activeDialogs.support().canUseNativeDialogs()) {
                 editorSounds.back(player);
                 messages.send(player, "prompt-cancelled");
             }
@@ -1711,7 +1709,9 @@ public class GuiManager implements Listener {
         for (String line : chatPromptLines(request)) {
             lines.add(messages.renderTemplate(line, Map.of()));
         }
-        lines.add(messages.render("prompt-start", "{prefix}{muted}Type your input in chat. Type {theme}cancel {muted}to abort."));
+        lines.add(messages.renderTemplateForViewer(player,
+                messages.config().getString("prompt-start", "{prefix}{muted}Type your input in chat. Type {theme}cancel {muted}to abort."),
+                Map.of()));
         prompts.openRaw(player, lines, "cancel", onSubmit, () -> {
             messages.send(player, "prompt-cancelled", "{prefix}{bad}Input cancelled.");
             run(onCancel);
@@ -1719,7 +1719,7 @@ public class GuiManager implements Listener {
     }
 
     private void warnNativeFallback(Player player, NativeDialogSupport support, boolean openedNative) {
-        if (openedNative || support == null || !support.configEnabled() || support.canUseNativeDialogs(player) || !support.warnOnFallback()) {
+        if (openedNative || support == null || !support.configEnabled() || support.canUseNativeDialogs() || !support.warnOnFallback()) {
             return;
         }
         if (!player.hasPermission("fokits.admin")) {
@@ -1831,7 +1831,9 @@ public class GuiManager implements Listener {
         if (meta != null) {
             String displayName = meta.hasDisplayName()
                     ? meta.getDisplayName()
-                    : messages.renderTemplateForViewer(player, "{theme}" + kit.getDisplayOrKey(), Map.of());
+                    : DialogIcons.withMaterialIcon(
+                            messages.renderTemplateForViewer(player, "{theme}" + kit.getDisplayOrKey(), Map.of()),
+                            item.getType());
             List<String> combinedLore = new ArrayList<>();
             if (meta.hasLore()) {
                 combinedLore.addAll(meta.getLore());
@@ -1879,7 +1881,8 @@ public class GuiManager implements Listener {
         lore.add("{muted}Cooldown: {theme}" + TimeUtil.formatDuration(kit.getCooldownMillis()));
         lore.add("{muted}Permission: {theme}" + (kit.getRequiredPermission().isBlank() ? "none" : kit.getRequiredPermission()));
 
-        return makeDisplayItem(resolveBaseKitDisplayItem(KitViewState.AVAILABLE, kit), "{theme}" + kit.getDisplayOrKey(), lore);
+        ItemStack base = resolveBaseKitDisplayItem(KitViewState.AVAILABLE, kit);
+        return makeButton(player, FoStyle.THEME, base.getType(), kit.getDisplayOrKey(), lore, "open kit settings");
     }
 
     private void saveEditorInventoryIntoKit(Inventory inventory, KitDefinition kit) {
@@ -2100,6 +2103,23 @@ public class GuiManager implements Listener {
         Material safeMaterial = material == null || material.isAir() ? Material.STONE : material;
         ItemStack item = new ItemStack(safeMaterial);
         return makeDisplayItem(item, displayName, lore, customModelData);
+    }
+
+    private ItemStack makeItem(Player viewer, Material material, String displayName, List<String> lore, Integer customModelData) {
+        Material safeMaterial = material == null || material.isAir() ? Material.STONE : material;
+        String renderedName = messages.renderTemplateForViewer(viewer, displayName, Map.of());
+        List<String> renderedLore = lore == null ? List.of() : lore.stream()
+                .map(line -> messages.renderTemplateForViewer(viewer, line, Map.of()))
+                .toList();
+        ItemStack item = EditorItemFactory.item(viewer, safeMaterial, renderedName, renderedLore);
+        if (customModelData != null) {
+            ItemMeta meta = item.getItemMeta();
+            if (meta != null) {
+                meta.setCustomModelData(customModelData);
+                item.setItemMeta(meta);
+            }
+        }
+        return item;
     }
 
     private ItemStack makeButton(Player player, String color, Material material, String label, List<String> information, String action) {

@@ -15,6 +15,8 @@ import me.foesio.core.editor.EditorItemFactory;
 import me.foesio.core.gui.GuiButtonConfig;
 import me.foesio.core.gui.GuiTitles;
 import me.foesio.core.gui.GuiSlots;
+import me.foesio.core.gui.publicgui.GuiLoadReport;
+import me.foesio.core.gui.publicgui.PublicGuiInventoryHolder;
 import me.foesio.core.gui.EntryBrowserClick;
 import me.foesio.core.gui.EntryBrowserHolder;
 import me.foesio.core.gui.EntryBrowserMenus;
@@ -64,6 +66,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -115,6 +118,7 @@ public class GuiManager implements Listener {
     private final Map<UUID, String> activeWorldSelectors = new HashMap<>();
     private final Set<UUID> warnedNativeFallbackPlayers = ConcurrentHashMap.newKeySet();
     private DialogService dialogs;
+    private final PublicKitGui publicKits;
 
     public GuiManager(
             JavaPlugin plugin,
@@ -138,6 +142,7 @@ public class GuiManager implements Listener {
         this.guiSounds = guiSounds;
         this.sounds = sounds;
         reloadDialogService();
+        this.publicKits = new PublicKitGui(plugin, this, kits, kitService, messages, guiSounds);
     }
 
     public void reloadDialogService() {
@@ -160,110 +165,33 @@ public class GuiManager implements Listener {
     }
 
     public void close() {
+        publicKits.close();
         prompts.close();
         warnedNativeFallbackPlayers.clear();
     }
 
-    public void openPlayerKits(Player player) {
-        openPlayerKits(player, true);
+    public GuiLoadReport reloadPublicGui() {
+        return publicKits.reload();
     }
 
-    private void openPlayerKits(Player player, boolean playOpenSound) {
-        if (playOpenSound) {
-            guiSounds.open(player);
-        }
-        int size = settings.playerGuiRows() * 9;
-        Inventory inventory = Bukkit.createInventory(player, size, GuiTitles.format(settings.playerGuiTitle()));
-        GuiSession session = new GuiSession(GuiType.PLAYER_KITS, "");
+    void forgetPublicSession(Player player) {
+        sessions.remove(player.getUniqueId());
+    }
 
-        if (settings.fillBackground()) {
-            ItemStack filler = settings.playerGuiFiller(player);
-            for (int i = 0; i < size; i++) {
-                inventory.setItem(i, filler);
-            }
-        }
+    org.bukkit.configuration.ConfigurationSection staticItemsConfig() {
+        return plugin.getConfig().getConfigurationSection("player-gui.layout.static-items");
+    }
 
-        List<KitDefinition> list = new ArrayList<>(kits.getAll());
-        list.sort(Comparator.comparingInt(KitDefinition::getOrderIndex).thenComparing(KitDefinition::getKey));
+    public void openPlayerKits(Player player) {
+        publicKits.openMain(player, true, 0);
+    }
 
-        Map<Integer, ItemStack> staticItems = settings.playerGuiStaticItems();
-        for (Map.Entry<Integer, ItemStack> entry : staticItems.entrySet()) {
-            if (entry.getValue() == null || entry.getValue().getType().isAir()) {
-                continue;
-            }
-            if (entry.getKey() < 0 || entry.getKey() >= size) {
-                continue;
-            }
-            inventory.setItem(entry.getKey(), entry.getValue().clone());
-        }
-
-        List<Integer> kitSlots = settings.playerGuiKitSlots();
-        if (kitSlots.isEmpty()) {
-            Set<Integer> blocked = new HashSet<>(staticItems.keySet());
-            for (int i = 0; i < size; i++) {
-                if (!blocked.contains(i)) {
-                    kitSlots.add(i);
-                }
-            }
-        }
-
-        ItemStack emptyKitSlot = settings.emptyKitSlot(player);
-        for (Integer slot : kitSlots) {
-            if (slot != null && slot >= 0 && slot < size) {
-                inventory.setItem(slot, emptyKitSlot.clone());
-            }
-        }
-
-        int kitIndex = 0;
-        for (Integer slot : kitSlots) {
-            if (slot == null || slot < 0 || slot >= size || kitIndex >= list.size()) {
-                continue;
-            }
-            KitDefinition kit = list.get(kitIndex++);
-            ItemStack icon = buildKitDisplayIcon(player, kit);
-            inventory.setItem(slot, icon);
-            session.getActions().put(slot, "kit:" + kit.getKey());
-        }
-
-        player.openInventory(inventory);
-        sessions.put(player.getUniqueId(), session);
+    public GuiLoadReport validatePublicGuiInstalled() {
+        return publicKits.validateInstalled();
     }
 
     public void openPreview(Player player, KitDefinition kit, boolean backToAdmin) {
-        if (!backToAdmin) {
-            guiSounds.open(player);
-        }
-        Inventory inventory = Bukkit.createInventory(player, PREVIEW_SIZE,
-                GuiTitles.format(settings.previewTitle(kit.getDisplayOrKey())));
-        GuiSession session = new GuiSession(GuiType.PLAYER_PREVIEW, kit.getKey());
-
-        ItemStack filler = settings.previewFiller(player);
-        for (int slot = 0; slot < PREVIEW_SIZE; slot++) {
-            inventory.setItem(slot, filler);
-        }
-
-        ItemStack[] armor = kit.getArmorItems();
-        inventory.setItem(1, cloneOrNull(armor, 0));
-        inventory.setItem(2, cloneOrNull(armor, 1));
-        inventory.setItem(3, cloneOrNull(armor, 2));
-        inventory.setItem(4, cloneOrNull(armor, 3));
-        inventory.setItem(KIT_OFFHAND_SLOT, kit.getOffhandItem() == null ? null : kit.getOffhandItem().clone());
-
-        ItemStack[] items = kit.getInventoryItems();
-        for (int i = 0; i < 36; i++) {
-            inventory.setItem(PREVIEW_STORAGE_START_SLOT + i, cloneOrNull(items, i));
-        }
-
-        if (backToAdmin) {
-            inventory.setItem(8, settings.previewBack(player));
-            session.getActions().put(8, "back:admin-kit-settings:" + kit.getKey());
-        } else {
-            inventory.setItem(8, settings.previewBack(player));
-            session.getActions().put(8, "back:player-kits");
-        }
-
-        player.openInventory(inventory);
-        sessions.put(player.getUniqueId(), session);
+        publicKits.openPreview(player, kit, backToAdmin, 0);
     }
 
     public void openAdminRoot(Player player) {
@@ -278,7 +206,7 @@ public class GuiManager implements Listener {
         GuiSession session = new GuiSession(GuiType.ADMIN_ROOT, "");
 
         fill(inventory, Material.GRAY_STAINED_GLASS_PANE);
-        inventory.setItem(11, makeButton(player, FoStyle.THEME, Material.CHEST, "Kit Editor", List.of("{white}Create, edit and delete kits."), "manage kits"));
+        inventory.setItem(11, makeButton(player, FoStyle.THEME, Material.CHEST_MINECART, "Kit Editor", List.of("{white}Create, edit and delete kits."), "manage kits"));
         inventory.setItem(15, makeButton(player, FoStyle.THEME, Material.PAINTING, "Main GUI Settings", List.of("{white}Edit the player /kits menu."), "edit GUI settings"));
 
         session.getActions().put(11, "open:admin-kit-list:reset");
@@ -474,7 +402,7 @@ public class GuiManager implements Listener {
             inventory.setItem(9 + i, cloneOrNull(contents, i));
         }
 
-        inventory.setItem(47, makeButton(player, FoStyle.GOOD, Material.CHEST, "Copy From Inventory", List.of(
+        inventory.setItem(47, makeButton(player, FoStyle.GOOD, Material.CHEST_MINECART, "Copy From Inventory", List.of(
                 "{white}Copy storage, armor and offhand.",
                 "{white}Keeps full item data."
         ), "copy items from inventory"));
@@ -540,11 +468,14 @@ public class GuiManager implements Listener {
     }
 
     public void openAdminPlayerGuiLayoutEditor(Player player) {
-        int size = settings.playerGuiRows() * 9;
+        var definition = publicKits.mainDefinition();
+        if (definition == null) {
+            messages.send(player, "reload-failed");
+            return;
+        }
+        int size = definition.size();
         Inventory inventory = Bukkit.createInventory(player, size, guiTitle("&8ᴋɪᴛ ɢᴜɪ ʟᴀʏᴏᴜᴛ"));
         GuiSession session = new GuiSession(GuiType.ADMIN_PLAYER_GUI_LAYOUT_EDITOR, "");
-
-        fill(inventory, settings.fillerMaterial());
 
         for (Map.Entry<Integer, ItemStack> entry : settings.playerGuiStaticItems().entrySet()) {
             if (entry.getKey() < 0 || entry.getKey() >= size || entry.getValue() == null || entry.getValue().getType().isAir()) {
@@ -567,6 +498,10 @@ public class GuiManager implements Listener {
                     null
             ));
         }
+        for (int slot : publicKits.layoutProtectedSlots()) {
+            inventory.setItem(slot, makeItem(player, Material.BARRIER,
+                    "{bad}Reserved Control Slot", List.of("{white}Edit this slot in guis/player-kits.yml."), null));
+        }
 
         messages.send(player, "layout-editor-start",
                 "{prefix}{muted}Layout editor: place {theme}CHEST{muted} items as kit slots, any other items become static GUI items, then close to save.");
@@ -580,12 +515,12 @@ public class GuiManager implements Listener {
 
         fill(inventory, Material.GRAY_STAINED_GLASS_PANE);
 
-        inventory.setItem(10, makeButton(player, FoStyle.THEME, Material.CHEST, "Edit /kits Layout",
+        inventory.setItem(10, makeButton(player, FoStyle.THEME, Material.CHEST_MINECART, "Edit /kits Layout",
                 List.of("{white}Use chest markers for kit slots.", "{white}Close layout editor to save."), "edit GUI layout"));
         inventory.setItem(11, makeButton(player, FoStyle.THEME, Material.NAME_TAG, "Title",
                 List.of("{white}Current: {theme}" + settings.playerGuiTitle(), "{white}Click to edit in chat."), "edit GUI title"));
-        inventory.setItem(13, makeButton(player, FoStyle.THEME, Material.CHEST, "Rows",
-                List.of("{white}Current: {theme}" + settings.playerGuiRows(), "{white}Use values 1-6."), "edit GUI rows"));
+        inventory.setItem(13, makeButton(player, FoStyle.THEME, Material.CHEST_MINECART, "Rows",
+                List.of("{white}Current: {theme}" + settings.playerGuiRows(), "{white}Use values 3-6."), "edit GUI rows"));
         inventory.setItem(15, makeButton(player, settings.fillBackground() ? FoStyle.GOOD : FoStyle.BAD,
                 settings.fillBackground() ? Material.LIME_DYE : Material.RED_DYE, "Fill Background",
                 List.of("{white}Current: " + (settings.fillBackground() ? "{good}enabled" : "{bad}disabled"),
@@ -608,6 +543,9 @@ public class GuiManager implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        if (event.getView().getTopInventory().getHolder() instanceof PublicGuiInventoryHolder) {
             return;
         }
 
@@ -672,6 +610,9 @@ public class GuiManager implements Listener {
         if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
+        if (event.getView().getTopInventory().getHolder() instanceof PublicGuiInventoryHolder) {
+            return;
+        }
 
         if (event.getView().getTopInventory().getHolder() instanceof EntryBrowserHolder) {
             int topSize = event.getView().getTopInventory().getSize();
@@ -731,9 +672,13 @@ public class GuiManager implements Listener {
         }
 
         if (session.getType() == GuiType.ADMIN_PLAYER_GUI_LAYOUT_EDITOR) {
-            savePlayerGuiLayout(event.getInventory());
-            sounds.play(player, "kit.layout-saved");
-            messages.send(player, "saved");
+            if (savePlayerGuiLayout(event.getInventory())) {
+                sounds.play(player, "kit.layout-saved");
+                messages.send(player, "saved");
+            } else {
+                editorSounds.error(player);
+                messages.send(player, "reload-failed");
+            }
             return;
         }
 
@@ -1041,7 +986,7 @@ public class GuiManager implements Listener {
         int raw = event.getRawSlot();
         int topSize = event.getView().getTopInventory().getSize();
         if (raw < topSize) {
-            event.setCancelled(false);
+            event.setCancelled(publicKits.layoutProtectedSlots().contains(raw));
             return;
         }
 
@@ -1160,11 +1105,6 @@ public class GuiManager implements Listener {
 
         if (action.startsWith("back:")) {
             String target = action.substring("back:".length());
-            if (target.equals("player-kits")) {
-                guiSounds.back(player);
-                openLater(player, () -> openPlayerKits(player, false));
-                return;
-            }
             editorSounds.back(player);
             if (target.equals("admin-root")) {
                 openLater(player, () -> openAdminRoot(player, false));
@@ -1174,26 +1114,6 @@ public class GuiManager implements Listener {
                 String key = target.substring("admin-kit-settings:".length());
                 openLater(player, () -> openAdminKitSettings(player, key));
             }
-            return;
-        }
-
-        if (action.startsWith("kit:")) {
-            String kitKey = action.substring("kit:".length());
-            Optional<KitDefinition> optionalKit = kits.get(kitKey);
-            if (optionalKit.isEmpty()) {
-                guiSounds.error(player);
-                openLater(player, () -> openPlayerKits(player, false));
-                return;
-            }
-            KitDefinition kit = optionalKit.get();
-            if (click.isRightClick()) {
-                openLater(player, () -> openPreview(player, kit, false));
-                return;
-            }
-
-            ClaimResult result = kitService.claim(player, kit);
-            kitService.sendClaimFeedback(player, result);
-            openLater(player, () -> openPlayerKits(player, false));
             return;
         }
 
@@ -1589,11 +1509,14 @@ public class GuiManager implements Listener {
                                 128
                         ),
                         input -> {
-                            FileConfiguration config = settings.rawConfig();
-                            config.set("player-gui.title", input);
-                            plugin.saveConfig();
-                            editorSounds.save(player);
-                            messages.send(player, "saved");
+                            if (publicKits.updateMain(yaml -> yaml.set("title", input))) {
+                                settings.reloadGui();
+                                editorSounds.save(player);
+                                messages.send(player, "saved");
+                            } else {
+                                editorSounds.error(player);
+                                messages.send(player, "reload-failed");
+                            }
                             openAdminGuiSettings(player);
                         },
                         () -> openAdminGuiSettings(player));
@@ -1605,7 +1528,7 @@ public class GuiManager implements Listener {
                                 "{muted}Set the player kits menu height.\n{white}Expected: {format}",
                                 "{white}Rows",
                                 String.valueOf(settings.playerGuiRows()),
-                                "1-6",
+                                "3-6",
                                 1
                         ),
                         input -> {
@@ -1619,27 +1542,35 @@ public class GuiManager implements Listener {
                                 return;
                             }
 
-                            if (rows < 1 || rows > 6) {
+                            if (rows < 3 || rows > 6) {
                                 editorSounds.error(player);
                                 messages.send(player, "invalid-input");
                                 openAdminGuiSettings(player);
                                 return;
                             }
 
-                            settings.rawConfig().set("player-gui.rows", rows);
-                            plugin.saveConfig();
-                            editorSounds.save(player);
-                            messages.send(player, "saved");
+                            if (publicKits.updateMain(yaml -> yaml.set("rows", rows))) {
+                                settings.reloadGui();
+                                editorSounds.save(player);
+                                messages.send(player, "saved");
+                            } else {
+                                editorSounds.error(player);
+                                messages.send(player, "reload-failed");
+                            }
                             openAdminGuiSettings(player);
                         },
                         () -> openAdminGuiSettings(player));
             }
             case "toggle-gui-fill" -> {
                 boolean next = !settings.fillBackground();
-                settings.rawConfig().set("player-gui.fill-background", next);
-                plugin.saveConfig();
-                editorSounds.toggle(player, next);
-                messages.send(player, "saved");
+                if (publicKits.updateMain(yaml -> yaml.set("filler.enabled", next))) {
+                    settings.reloadGui();
+                    editorSounds.toggle(player, next);
+                    messages.send(player, "saved");
+                } else {
+                    editorSounds.error(player);
+                    messages.send(player, "reload-failed");
+                }
                 openLater(player, () -> openAdminGuiSettings(player));
             }
             case "edit-gui-filler" -> {
@@ -1660,10 +1591,14 @@ public class GuiManager implements Listener {
                                 openAdminGuiSettings(player);
                                 return;
                             }
-                            settings.rawConfig().set("player-gui.filler-material", material.name());
-                            plugin.saveConfig();
-                            editorSounds.save(player);
-                            messages.send(player, "saved");
+                            if (publicKits.updateMain(yaml -> yaml.set("filler.material", material.name()))) {
+                                settings.reloadGui();
+                                editorSounds.save(player);
+                                messages.send(player, "saved");
+                            } else {
+                                editorSounds.error(player);
+                                messages.send(player, "reload-failed");
+                            }
                             openAdminGuiSettings(player);
                         },
                         () -> openAdminGuiSettings(player));
@@ -1804,51 +1739,6 @@ public class GuiManager implements Listener {
         }
     }
 
-    private ItemStack buildKitDisplayIcon(Player player, KitDefinition kit) {
-        List<String> lore = new ArrayList<>();
-
-        KitViewState state = kitService.getViewState(player, kit);
-        switch (state) {
-            case AVAILABLE -> lore.addAll(settings.loreForState("available"));
-            case COOLDOWN -> lore.addAll(settings.loreForState("cooldown"));
-            case NO_PERMISSION, WORLD_BLOCKED -> lore.addAll(settings.loreForState("no-permission"));
-            case CLAIMED_ONCE -> lore.addAll(settings.loreForState("claimed-once"));
-            case DISABLED -> lore.addAll(settings.loreForState("disabled"));
-        }
-
-        long remaining = kitService.remainingMillis(player, kit);
-        Map<String, String> replacements = Map.of(
-                "{time_remaining}", TimeUtil.formatDuration(remaining)
-        );
-
-        List<String> renderedLore = new ArrayList<>();
-        for (String line : lore) {
-            renderedLore.add(messages.renderTemplateForViewer(player, line, replacements));
-        }
-
-        ItemStack item = resolveBaseKitDisplayItem(state, kit);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            String displayName = meta.hasDisplayName()
-                    ? meta.getDisplayName()
-                    : DialogIcons.withMaterialIcon(
-                            messages.renderTemplateForViewer(player, "{theme}" + kit.getDisplayOrKey(), Map.of()),
-                            item.getType());
-            List<String> combinedLore = new ArrayList<>();
-            if (meta.hasLore()) {
-                combinedLore.addAll(meta.getLore());
-            }
-            combinedLore.addAll(renderedLore);
-            if (!DialogIcons.applyItemMeta(meta, player, displayName, combinedLore)) {
-                meta.setDisplayName(DialogIcons.fallbackText(displayName));
-                meta.setLore(combinedLore.stream().map(DialogIcons::fallbackText).toList());
-            }
-            meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
     private ItemStack resolveBaseKitDisplayItem(KitViewState state, KitDefinition kit) {
         if ((state == KitViewState.CLAIMED_ONCE || state == KitViewState.COOLDOWN)
                 && kit.getClaimedDisplayItem() != null
@@ -1882,7 +1772,9 @@ public class GuiManager implements Listener {
         lore.add("{muted}Permission: {theme}" + (kit.getRequiredPermission().isBlank() ? "none" : kit.getRequiredPermission()));
 
         ItemStack base = resolveBaseKitDisplayItem(KitViewState.AVAILABLE, kit);
-        return makeButton(player, FoStyle.THEME, base.getType(), kit.getDisplayOrKey(), lore, "open kit settings");
+        Material buttonMaterial = base.getType() == Material.CHEST
+                ? Material.CHEST_MINECART : base.getType();
+        return makeButton(player, FoStyle.THEME, buttonMaterial, kit.getDisplayOrKey(), lore, "open kit settings");
     }
 
     private void saveEditorInventoryIntoKit(Inventory inventory, KitDefinition kit) {
@@ -1913,12 +1805,16 @@ public class GuiManager implements Listener {
         kits.save(kit);
     }
 
-    private void savePlayerGuiLayout(Inventory inventory) {
+    private boolean savePlayerGuiLayout(Inventory inventory) {
         int size = inventory.getSize();
         List<Integer> kitSlots = new ArrayList<>();
-        settings.rawConfig().set("player-gui.layout.static-items", null);
+        Map<Integer, ItemStack> staticItems = new LinkedHashMap<>();
+        Set<Integer> protectedSlots = publicKits.layoutProtectedSlots();
 
         for (int slot = 0; slot < size; slot++) {
+            if (protectedSlots.contains(slot)) {
+                continue;
+            }
             ItemStack item = inventory.getItem(slot);
             if (item == null || item.getType().isAir()) {
                 continue;
@@ -1929,11 +1825,34 @@ public class GuiManager implements Listener {
                 continue;
             }
 
-            settings.rawConfig().set("player-gui.layout.static-items." + slot, item);
+            staticItems.put(slot, item.clone());
         }
-
-        settings.rawConfig().set("player-gui.layout.kit-slots", kitSlots);
+        if (kitSlots.isEmpty()) {
+            return false;
+        }
+        if (new HashSet<>(kitSlots).equals(new HashSet<>(settings.playerGuiKitSlots()))
+                && staticItems.equals(settings.playerGuiStaticItems())) {
+            return true;
+        }
+        if (!publicKits.updateMain(yaml -> {
+            yaml.set("entries.kits.slots", kitSlots);
+            if (staticItems.isEmpty()) {
+                yaml.set("entries.static-items", null);
+            } else {
+                yaml.set("entries.static-items.slots", new ArrayList<>(staticItems.keySet()));
+                if (!yaml.isConfigurationSection("entries.static-items.source-item")) {
+                    yaml.createSection("entries.static-items.source-item");
+                }
+            }
+        })) {
+            return false;
+        }
+        settings.rawConfig().set("player-gui.layout.static-items", null);
+        staticItems.forEach((slot, item) ->
+                settings.rawConfig().set("player-gui.layout.static-items." + slot, item));
         plugin.saveConfig();
+        settings.reloadGui();
+        return true;
     }
 
     private void clearEditorSlots(Inventory inventory) {

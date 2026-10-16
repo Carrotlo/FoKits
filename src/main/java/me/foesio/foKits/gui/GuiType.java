@@ -1,8 +1,6 @@
 package me.foesio.foKits.gui;
 
 public enum GuiType {
-    PLAYER_KITS,
-    PLAYER_PREVIEW,
     ADMIN_ROOT,
     ADMIN_KIT_LIST,
     ADMIN_KIT_SETTINGS,

@@ -8,8 +8,23 @@ tokens:
   good: "#3ecf8e"
   bad: "#ff5d73"
 
+# Complete unit phrases for {time_remaining}. Change the order or spacing with separator.
+duration:
+  zero: "0s"
+  separator: ""
+  day: {one: "{count}d", many: "{count}d"}
+  hour: {one: "{count}h", many: "{count}h"}
+  minute: {one: "{count}m", many: "{count}m"}
+  second: {one: "{count}s", many: "{count}s"}
+
+# Text returned by the can_claim and claimed_once PlaceholderAPI placeholders.
+placeholder-values:
+  'true': "true"
+  'false': "false"
+
 no-permission: "{prefix}{bad}You do not have permission for that."
 players-only: "{prefix}{bad}Only players can use this command."
+gui-unavailable: "{prefix}{bad}The kit menu is temporarily unavailable. Ask an administrator to check its GUI configuration."
 invalid-admin-usage: "{prefix}:paper: {muted}Use {theme}/fokitsadmin <version|reload|editor|resetcooldown>"
 unknown-admin-arg: "{prefix}{bad}Unknown subcommand. {muted}Use {theme}version{muted}, {theme}reload{muted}, {theme}editor{muted}, or {theme}resetcooldown"
 admin-resetcooldown-usage: "{prefix}{muted}Use {theme}/fokitsadmin resetcooldown <player> [kit]"
@@ -27,7 +42,7 @@ claim-missing-permission: "{prefix}{bad}You need {theme}{permission}{bad} to cla
 claim-world-blocked: "{prefix}{bad}That kit cannot be claimed in this world."
 claim-cooldown: "{prefix}{bad}You can claim {theme}{kit}{bad} again in {theme}{time_remaining}{bad}."
 claim-once-used: "{prefix}{bad}You have already claimed {theme}{kit}{bad}."
-claim-no-space: "{prefix}:chest: {bad}You need more inventory space before claiming this kit."
+claim-no-space: "{prefix}:chest_minecart: {bad}You need more inventory space before claiming this kit."
 prompt-start: "{prefix}{muted}Type your input in chat. Type {theme}cancel {muted}to abort."
 prompt-cancelled: "{prefix}{bad}Input cancelled."
 native-dialogs-fallback: "{prefix}{muted}Native dialogs are unavailable on this server. Using chat input fallback."

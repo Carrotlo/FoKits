@@ -130,10 +130,10 @@ public class KitService {
         userDataRepository.setClaim(player.getUniqueId(), kit, now);
 
         executeClaimCommands(player, kit);
-        if (kit.isBroadcastOnClaim()) {
+        if (kit.isBroadcastOnClaim() && hasConfiguredMessage("claim-broadcast")) {
             plugin.getServer().broadcastMessage(messages.render(
                     "claim-broadcast",
-                    "{prefix}{muted}{player} claimed {theme}{kit}{muted}.",
+                    "",
                     Map.of(
                             "{player}", player.getName(),
                             "{kit}", kit.getDisplayOrKey()
@@ -148,40 +148,52 @@ public class KitService {
         String kitName = result.kit().getDisplayOrKey();
         switch (result.type()) {
             case SUCCESS -> {
-                sounds.playWithPitchVariation(player, "kit.claimed", 0.04f);
-                messages.send(player, "claim-success", Map.of("{kit}", kitName));
+                sounds.play(player, "kit.claimed");
+                sendFeedback(player, "claim-success", Map.of("{kit}", kitName));
             }
             case DISABLED -> {
                 sounds.play(player, "kit.denied");
-                messages.send(player, "claim-disabled", Map.of("{kit}", kitName));
+                sendFeedback(player, "claim-disabled", Map.of("{kit}", kitName));
             }
             case MISSING_PERMISSION -> {
                 sounds.play(player, "kit.denied");
-                messages.send(player, "claim-missing-permission", Map.of(
+                sendFeedback(player, "claim-missing-permission", Map.of(
                         "{kit}", kitName,
                         "{permission}", result.missingPermission()
                 ));
             }
             case WORLD_BLOCKED -> {
                 sounds.play(player, "kit.denied");
-                messages.send(player, "claim-world-blocked", Map.of("{kit}", kitName));
+                sendFeedback(player, "claim-world-blocked", Map.of("{kit}", kitName));
             }
             case COOLDOWN -> {
                 sounds.play(player, "kit.denied");
-                messages.send(player, "claim-cooldown", Map.of(
+                sendFeedback(player, "claim-cooldown", Map.of(
                         "{kit}", kitName,
-                        "{time_remaining}", TimeUtil.formatDuration(result.remainingMillis())
+                        "{time_remaining}", TimeUtil.formatDuration(result.remainingMillis(), messages.config())
                 ));
             }
             case CLAIMED_ONCE -> {
                 sounds.play(player, "kit.denied");
-                messages.send(player, "claim-once-used", Map.of("{kit}", kitName));
+                sendFeedback(player, "claim-once-used", Map.of("{kit}", kitName));
             }
             case NO_SPACE -> {
                 sounds.play(player, "kit.denied");
-                messages.send(player, "claim-no-space", Map.of("{kit}", kitName));
+                sendFeedback(player, "claim-no-space", Map.of("{kit}", kitName));
             }
         }
+    }
+
+    private void sendFeedback(Player player, String path, Map<String, String> placeholders) {
+        if (hasConfiguredMessage(path)) {
+            messages.send(player, path, "", placeholders);
+        }
+    }
+
+    private boolean hasConfiguredMessage(String path) {
+        Object value = messages.config().get(path);
+        return value instanceof String text && !text.isEmpty()
+                || value instanceof List<?> lines && !lines.isEmpty();
     }
 
     public void playClaimDeniedSound(Player player) {
@@ -294,16 +306,16 @@ public class KitService {
     }
 
     public String formatRemaining(Player player, KitDefinition kit) {
-        return TimeUtil.formatDuration(remainingMillis(player, kit));
+        return TimeUtil.formatDuration(remainingMillis(player, kit), messages.config());
     }
 
     public String placeholdersForKit(Player player, String key, String token) {
         return switch (token.toLowerCase(Locale.ROOT)) {
             case "time_remaining" -> formatRemaining(player, key);
             case "time_remaining_seconds" -> String.valueOf(remainingSeconds(player, key));
-            case "can_claim" -> String.valueOf(canClaim(player, key));
+            case "can_claim" -> placeholderBoolean(canClaim(player, key));
             case "next_claim_at" -> String.valueOf(nextClaimEpochSeconds(player, key));
-            case "claimed_once" -> String.valueOf(claimedOnce(player, key));
+            case "claimed_once" -> placeholderBoolean(claimedOnce(player, key));
             default -> "";
         };
     }
@@ -311,7 +323,7 @@ public class KitService {
     public String formatRemaining(Player player, String key) {
         KitDefinition kit = pluginKitByKey(key);
         if (kit == null) {
-            return "0s";
+            return TimeUtil.formatDuration(0L, messages.config());
         }
         return formatRemaining(player, kit);
     }
@@ -344,6 +356,11 @@ public class KitService {
     public boolean claimedOnce(Player player, String key) {
         KitDefinition kit = pluginKitByKey(key);
         return kit != null && hasClaimedOnce(player, kit);
+    }
+
+    private String placeholderBoolean(boolean value) {
+        String path = value ? "placeholder-values.true" : "placeholder-values.false";
+        return messages.config().getString(path, "");
     }
 
     private KitDefinition pluginKitByKey(String key) {

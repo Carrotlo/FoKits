@@ -1,0 +1,68 @@
+title: "&8ᴋɪᴛ ᴘʀᴇᴠɪᴇᴡ"
+rows: 6
+filler:
+  enabled: true
+  material: "GRAY_STAINED_GLASS_PANE"
+  name: " "
+buttons:
+  back:
+    slot: 8
+    enabled: true
+    material: "IRON_DOOR"
+    name: ":iron_door: &e&lBACK"
+    lore:
+      - "&8ʙᴜᴛᴛᴏɴ"
+      - " "
+      - "&eⓘ Information ↓"
+      - "&7&l | &fReturn to the previous menu."
+      - " "
+      - "&a→ Click to go back ←"
+    action: "kits.preview.back"
+entries:
+  contents:
+    slots:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 6
+      - 18
+      - 19
+      - 20
+      - 21
+      - 22
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 45
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+    source-item: {}
+    empty-item:
+      material: "LIGHT_GRAY_STAINED_GLASS_PANE"
+      name: " "

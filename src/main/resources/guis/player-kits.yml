@@ -1,64 +1,105 @@
-# Public player kit selector presentation. Layout, slot routing, and kit data
-# remain in config.yml and the kit data files.
 title: "&8ᴋɪᴛ ѕᴇʟᴇᴄᴛᴏʀ"
-
+rows: 3
 filler:
-  material: GRAY_STAINED_GLASS_PANE
-  custom-model-data: ''
-  name: ' '
+  enabled: true
+  material: "GRAY_STAINED_GLASS_PANE"
+  name: " "
   lore: []
-
-empty-kit-slot:
-  material: LIGHT_GRAY_STAINED_GLASS_PANE
-  custom-model-data: ''
-  name: ' '
-  lore: []
-
-states:
-  available:
+buttons:
+  previous-page:
+    slot: 9
+    material: "ARROW"
+    name: ":arrow: &e&lPREVIOUS PAGE"
     lore:
-      - "{white}Left click to claim this kit."
-      - "{white}Right click to preview its contents."
-      - ""
-      - ":lime_dye: {muted}Status: {good}Ready"
-  cooldown:
+      - "&8ʙᴜᴛᴛᴏɴ"
+      - " "
+      - "&eⓘ Information ↓"
+      - "&7&l | &fPage {page} of {pages}."
+      - " "
+      - "&a→ Click to go to page {previous_page} ←"
+    enabled: true
+    action: "kits.page.previous"
+    states:
+      unavailable:
+        material: "GRAY_STAINED_GLASS_PANE"
+        name: " "
+        lore: []
+        clickable: false
+  next-page:
+    slot: 17
+    material: "ARROW"
+    name: ":arrow: &e&lNEXT PAGE"
     lore:
-      - "{white}Left click to try claiming."
-      - "{white}Right click to preview its contents."
-      - ""
-      - ":clock: {muted}Next claim in: {theme}{time_remaining}"
-  no-permission:
-    lore:
-      - "{white}Left click to try claiming."
-      - "{white}Right click to preview its contents."
-      - ""
-      - ":red_dye: {muted}Status: {bad}Missing permission"
-  claimed-once:
-    lore:
-      - "{white}Left click to try claiming."
-      - "{white}Right click to preview its contents."
-      - ""
-      - ":red_dye: {muted}Status: {bad}Already claimed"
-  disabled:
-    lore:
-      - ":barrier: {white}This kit is currently disabled."
-
-preview:
-  title: "&8ᴋɪᴛ ᴘʀᴇᴠɪᴇᴡ &8- {kit}"
-  filler:
-    material: GRAY_STAINED_GLASS_PANE
-    custom-model-data: ''
-    name: ' '
-    lore: []
-  buttons:
-    back:
-      material: IRON_DOOR
-      custom-model-data: ''
-      name: ':iron_door: &e&lBACK'
-      lore:
-        - '&8ʙᴜᴛᴛᴏɴ'
-        - ' '
-        - '&eⓘ Information ↓'
-        - '&7&l | &fReturn to the previous menu.'
-        - ' '
-        - '&a→ Click to go back ←'
+      - "&8ʙᴜᴛᴛᴏɴ"
+      - " "
+      - "&eⓘ Information ↓"
+      - "&7&l | &fPage {page} of {pages}."
+      - " "
+      - "&a→ Click to go to page {next_page} ←"
+    enabled: true
+    action: "kits.page.next"
+    states:
+      unavailable:
+        material: "GRAY_STAINED_GLASS_PANE"
+        name: " "
+        lore: []
+        clickable: false
+entries:
+  kits:
+    slots:
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+    source-item:
+      default-name: "{material_sprite}{theme}{kit}"
+      lore-states:
+        available:
+          mode: "append"
+          lines:
+            - "{white}Left click to claim this kit."
+            - "{white}Right click to preview its contents."
+            - ""
+            - ":lime_dye: {muted}Status: {good}Ready"
+        cooldown:
+          mode: "append"
+          lines:
+            - "{white}Left click to try claiming."
+            - "{white}Right click to preview its contents."
+            - ""
+            - ":clock: {muted}Next claim in: {theme}{time_remaining}"
+        no-permission:
+          mode: "append"
+          lines:
+            - "{white}Left click to try claiming."
+            - "{white}Right click to preview its contents."
+            - ""
+            - ":red_dye: {muted}Status: {bad}Missing permission"
+        world-blocked:
+          mode: "append"
+          lines:
+            - "{white}Left click to try claiming."
+            - "{white}Right click to preview its contents."
+            - ""
+            - ":barrier: {muted}Status: {bad}Unavailable in {world}"
+        claimed-once:
+          mode: "append"
+          lines:
+            - "{white}Left click to try claiming."
+            - "{white}Right click to preview its contents."
+            - ""
+            - ":red_dye: {muted}Status: {bad}Already claimed"
+        disabled:
+          mode: "append"
+          lines:
+            - ":barrier: {white}This kit is currently disabled."
+    empty-item:
+      material: "LIGHT_GRAY_STAINED_GLASS_PANE"
+      name: " "
+      lore: []
+    actions:
+      left: "kits.claim"
+      shift-left: "kits.claim"
+      right: "kits.preview"
+      shift-right: "kits.preview"

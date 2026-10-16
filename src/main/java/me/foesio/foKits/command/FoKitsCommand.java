@@ -36,12 +36,12 @@ public class FoKitsCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("fokits.use")) {
-            messages.send(sender, "no-permission");
+            sendFeedback(sender, "no-permission", Map.of());
             adminSounds.updateError(sender);
             return true;
         }
         if (!(sender instanceof Player player)) {
-            messages.send(sender, "players-only");
+            sendFeedback(sender, "players-only", Map.of());
             return true;
         }
 
@@ -54,12 +54,20 @@ public class FoKitsCommand implements CommandExecutor, TabCompleter {
         Optional<KitDefinition> optionalKit = kits.get(requestedKey);
         if (optionalKit.isEmpty()) {
             adminSounds.updateError(player);
-            messages.send(player, "claim-kit-not-found", Map.of("{kit}", args[0]));
+            sendFeedback(player, "claim-kit-not-found", Map.of("{kit}", args[0]));
             return true;
         }
 
         kitService.sendClaimFeedback(player, kitService.claim(player, optionalKit.get()));
         return true;
+    }
+
+    private void sendFeedback(CommandSender sender, String path, Map<String, String> placeholders) {
+        Object configured = messages.config().get(path);
+        if (configured instanceof String text && !text.isEmpty()
+                || configured instanceof List<?> lines && !lines.isEmpty()) {
+            messages.send(sender, path, "", placeholders);
+        }
     }
 
     @Override

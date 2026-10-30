@@ -32,7 +32,7 @@ public class KitRepository {
         this.kitsFolder = new File(plugin.getDataFolder(), "kits");
     }
 
-    public void loadAll() {
+    public synchronized void loadAll() {
         if (!kitsFolder.exists() && !kitsFolder.mkdirs()) {
             plugin.getLogger().warning("Could not create kits folder.");
         }
@@ -56,7 +56,7 @@ public class KitRepository {
         }
     }
 
-    public Collection<KitDefinition> getAll() {
+    public synchronized Collection<KitDefinition> getAll() {
         List<KitDefinition> kits = new ArrayList<>();
         for (KitDefinition kit : cache.values()) {
             kits.add(kit.copy());
@@ -65,7 +65,7 @@ public class KitRepository {
         return kits;
     }
 
-    public Optional<KitDefinition> get(String key) {
+    public synchronized Optional<KitDefinition> get(String key) {
         if (key == null) {
             return Optional.empty();
         }
@@ -73,11 +73,11 @@ public class KitRepository {
         return kit == null ? Optional.empty() : Optional.of(kit.copy());
     }
 
-    public boolean exists(String key) {
+    public synchronized boolean exists(String key) {
         return cache.containsKey(KitDefinition.sanitizeKey(key));
     }
 
-    public KitDefinition createNew(String key) {
+    public synchronized KitDefinition createNew(String key) {
         String finalKey = KitDefinition.sanitizeKey(key);
         if (cache.containsKey(finalKey)) {
             throw new IllegalArgumentException("Kit already exists: " + finalKey);
@@ -94,7 +94,7 @@ public class KitRepository {
         return kit.copy();
     }
 
-    public void save(KitDefinition input) {
+    public synchronized void save(KitDefinition input) {
         KitDefinition kit = input.copy();
         String key = KitDefinition.sanitizeKey(kit.getKey());
         kit.setKey(key);
@@ -127,14 +127,14 @@ public class KitRepository {
         }
     }
 
-    public boolean delete(String key) {
+    public synchronized boolean delete(String key) {
         String sanitized = KitDefinition.sanitizeKey(key);
         cache.remove(sanitized);
         File file = new File(kitsFolder, sanitized + ".yml");
         return !file.exists() || file.delete();
     }
 
-    public Optional<KitDefinition> rename(String oldKey, String newKey) {
+    public synchronized Optional<KitDefinition> rename(String oldKey, String newKey) {
         String oldSanitized = KitDefinition.sanitizeKey(oldKey);
         String newSanitized = KitDefinition.sanitizeKey(newKey);
         if (!cache.containsKey(oldSanitized) || cache.containsKey(newSanitized)) {

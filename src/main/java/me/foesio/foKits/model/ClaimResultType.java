@@ -7,5 +7,8 @@ public enum ClaimResultType {
     WORLD_BLOCKED,
     COOLDOWN,
     CLAIMED_ONCE,
-    NO_SPACE
+    NO_SPACE,
+    CANCELLED,
+    BUSY,
+    NOT_FOUND
 }

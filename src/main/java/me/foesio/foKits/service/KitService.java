@@ -6,6 +6,8 @@ import me.foesio.core.inventory.InventoryDepositService;
 import me.foesio.core.inventory.OverflowPolicy;
 import me.foesio.core.message.FoMessageService;
 import me.foesio.core.sound.FoSoundService;
+import me.foesio.foKits.api.event.KitClaimPreEvent;
+import me.foesio.foKits.api.event.KitClaimedEvent;
 import me.foesio.foKits.config.PluginSettings;
 import me.foesio.foKits.model.ClaimMode;
 import me.foesio.foKits.model.ClaimResult;
@@ -25,6 +27,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class KitService {
     private final JavaPlugin plugin;
@@ -34,6 +39,7 @@ public class KitService {
     private final FoMessageService messages;
     private final InventoryDepositService inventoryDeposits;
     private final FoSoundService sounds;
+    private final Set<UUID> claimsInProgress = ConcurrentHashMap.newKeySet();
 
     public KitService(
             JavaPlugin plugin,
@@ -86,7 +92,39 @@ public class KitService {
     }
 
     public ClaimResult claim(Player player, KitDefinition kit) {
+        if (!claimsInProgress.add(player.getUniqueId())) {
+            return ClaimResult.of(ClaimResultType.BUSY, kit);
+        }
+        try {
+            return claimOnce(player, kit);
+        } finally {
+            claimsInProgress.remove(player.getUniqueId());
+        }
+    }
+
+    private ClaimResult claimOnce(Player player, KitDefinition kit) {
+        KitDefinition currentAtStart = kitRepository.get(kit.getKey()).orElse(null);
+        if (currentAtStart == null) {
+            return ClaimResult.of(ClaimResultType.NOT_FOUND, kit);
+        }
+        kit = currentAtStart;
         ClaimResult evaluation = evaluate(player, kit);
+        if (evaluation.type() != ClaimResultType.SUCCESS) {
+            return evaluation;
+        }
+
+        KitClaimPreEvent before = new KitClaimPreEvent(player, KitSnapshots.of(kit), !Bukkit.isPrimaryThread());
+        Bukkit.getPluginManager().callEvent(before);
+        if (before.isCancelled()) {
+            return ClaimResult.of(ClaimResultType.CANCELLED, kit);
+        }
+
+        KitDefinition current = kitRepository.get(kit.getKey()).orElse(null);
+        if (current == null) {
+            return ClaimResult.of(ClaimResultType.NOT_FOUND, kit);
+        }
+        kit = current;
+        evaluation = evaluate(player, kit);
         if (evaluation.type() != ClaimResultType.SUCCESS) {
             return evaluation;
         }
@@ -128,6 +166,9 @@ public class KitService {
 
         long now = System.currentTimeMillis();
         userDataRepository.setClaim(player.getUniqueId(), kit, now);
+
+        Bukkit.getPluginManager().callEvent(new KitClaimedEvent(
+                player, KitSnapshots.of(kit), now, !Bukkit.isPrimaryThread()));
 
         executeClaimCommands(player, kit);
         if (kit.isBroadcastOnClaim() && hasConfiguredMessage("claim-broadcast")) {
@@ -181,6 +222,16 @@ public class KitService {
                 sounds.play(player, "kit.denied");
                 sendFeedback(player, "claim-no-space", Map.of("{kit}", kitName));
             }
+            case CANCELLED, BUSY -> {
+                sounds.play(player, "kit.denied");
+                messages.send(player, "claim-cancelled", "{prefix}{bad}Kit claim unavailable right now.",
+                        Map.of("{kit}", kitName));
+            }
+            case NOT_FOUND -> {
+                sounds.play(player, "kit.denied");
+                messages.send(player, "claim-kit-not-found", "{prefix}{bad}Kit not found: {theme}{kit}",
+                        Map.of("{kit}", kitName));
+            }
         }
     }
 
@@ -210,6 +261,7 @@ public class KitService {
             case DISABLED -> KitViewState.DISABLED;
             case WORLD_BLOCKED -> KitViewState.WORLD_BLOCKED;
             case NO_SPACE -> KitViewState.AVAILABLE;
+            case CANCELLED, BUSY, NOT_FOUND -> KitViewState.AVAILABLE;
         };
     }
 

@@ -71,6 +71,6 @@ duration wording used in cooldown messages and the selector.
 <details>
 <summary><strong>Developer API</strong></summary>
 
-This plugin does not expose a public developer API.
+FoKits exposes a Java service for kit queries, claims, resets, and opening the player menu, plus pre-claim and claimed events. See [public API source](src/main/java/me/foesio/foKits/api).
 
 </details>

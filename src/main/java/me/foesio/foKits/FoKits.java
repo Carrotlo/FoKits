@@ -12,6 +12,7 @@ import me.foesio.core.sound.FoGuiSounds;
 import me.foesio.core.sound.FoSoundService;
 import me.foesio.core.update.UpdateNoticeService;
 import me.foesio.foKits.command.FoKitsAdminCommand;
+import me.foesio.foKits.api.FoKitsApi;
 import me.foesio.foKits.command.FoKitsCommand;
 import me.foesio.foKits.config.ConfigManager;
 import me.foesio.foKits.config.PluginSettings;
@@ -19,6 +20,7 @@ import me.foesio.foKits.config.PublicKitGuiMigration;
 import me.foesio.foKits.gui.GuiManager;
 import me.foesio.foKits.placeholder.FoKitsPlaceholderExpansion;
 import me.foesio.foKits.service.KitService;
+import me.foesio.foKits.service.FoKitsApiImpl;
 import me.foesio.foKits.storage.KitRepository;
 import me.foesio.foKits.storage.UserDataRepository;
 import org.bukkit.command.PluginCommand;
@@ -26,6 +28,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.ServicePriority;
 
 import java.io.File;
 import java.io.IOException;
@@ -58,6 +61,7 @@ public final class FoKits extends JavaPlugin {
     private KitRepository kitRepository;
     private UserDataRepository userDataRepository;
     private KitService kitService;
+    private FoKitsApi api;
     private GuiManager guiManager;
     private UpdateNoticeService updates;
     private FoSoundService sounds;
@@ -115,6 +119,9 @@ public final class FoKits extends JavaPlugin {
         kitService = new KitService(this, settings, kitRepository, userDataRepository, messages, core.inventoryDeposits(), sounds);
         guiManager = new GuiManager(this, core, settings, messages, kitRepository, kitService, editorSounds, guiSounds, sounds);
 
+        api = new FoKitsApiImpl(this, kitRepository, kitService, userDataRepository, guiManager);
+        getServer().getServicesManager().register(FoKitsApi.class, api, this, ServicePriority.Normal);
+
         getServer().getPluginManager().registerEvents(guiManager, this);
 
         registerCommands();
@@ -126,6 +133,10 @@ public final class FoKits extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (api != null) {
+            getServer().getServicesManager().unregister(FoKitsApi.class, api);
+            api = null;
+        }
         if (guiManager != null) {
             guiManager.close();
         }
